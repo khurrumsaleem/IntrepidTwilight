@@ -1,13 +1,13 @@
-classdef Shape < IntrepidTwilight.AdamantWave.AdamantParent
+classdef Shape < handle
     
-    properties(SetAccess = private , Hidden)
-        ID   = 'Shape';
-        Purpose = ...
-            'Holds all geometric data and location information of a shape.';
+    properties( SetAccess = protected , Hidden )
+        Type = 'Shape'
     end
     
     properties
-        % 2D Location of shape (relative to some origin)
+        
+        % 2D location of shape (relative to some origin)
+        %   Expected to be an array of (x,y) pairs
         Top
         Bottom
         Left
@@ -17,16 +17,31 @@ classdef Shape < IntrepidTwilight.AdamantWave.AdamantParent
         SurfaceArea
         Volume
         
-        % Description of shape
-        Description
+        % Kinematic geometry information
+        FlowArea
+        FlowDirection
+
     end
     
     methods
+
         function S = Shape(n)
             if (nargin >= 1) && not(isempty(n))
-                S(n) = FlowInterface();
+                S(n) = Shape();
             end
         end
+        
+        
+        function [] = SetVertices(S,V1,V2,V3,V4)
+            V = [V1(:,1),V2(:,1),V3(:,1),V4(:,1)];
+            S.Left   = min(V,[],2);
+            S.Right  = max(V,[],2);
+            
+            V = [V1(:,2),V2(:,2),V3(:,2),V4(:,2)];
+            S.Top    = max(V,[],2);
+            S.Bottom = min(V,[],2);
+        end
+
     end
     
 end

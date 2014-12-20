@@ -1,7 +1,10 @@
-classdef State < handle
+classdef Thermodynamics < handle
 
     properties
+        
+        % Fluid name
         Fluid
+        Phase
 
         % Thermodynamic properties
         Pressure
@@ -16,14 +19,12 @@ classdef State < handle
         ThermalConductivity
         DynamicViscosity
 
-
-        
     end
     
     methods
-        function S = State(n)
+        function Thermo = Thermodynamics(n)
             if (nargin >= 1) && not(isempty(n))
-                S(n) = State();
+                Thermo(n) = Thermodynamics();
             end
         end
     end

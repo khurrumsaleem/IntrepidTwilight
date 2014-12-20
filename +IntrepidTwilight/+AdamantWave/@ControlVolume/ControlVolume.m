@@ -1,16 +1,14 @@
-classdef ControlVolume < IntrepidTwilight.AdamantWave.AdamantParent
-    
-    properties(SetAccess = private , Hidden)
-        ID   = 'ControlVolume';
-        Purpose = ...
-            'To describe the state of a (finite) fluid-filled volume.';
-    end
+classdef ControlVolume < handle
     
     properties
-        Geometry = IntrepidTwilight.AdamantWave.Shape();
-        State    = IntrepidTwilight.AdamantWave.State();
+        
+        Name
+        ID
+        
+        Geometry       = IntrepidTwilight.AdamantWave.Shape()           ;
+        Thermodynamics = IntrepidTwilight.AdamantWave.Thermodynamics()  ;
+        Kinematics     = IntrepidTwilight.AdamantWave.Kinematics()      ;
     end
-    
     
     methods
         function CV = ControlVolume(n)
