@@ -7,19 +7,12 @@ classdef Shape < handle
     properties
         
         % 2D location of shape (relative to some origin)
-        %   Expected to be an array of (x,y) pairs
-        Top
-        Bottom
-        Left
-        Right
+        %   Expected to be an array of (x,y,z,...) tuples
+        V
 
         % 3D information of shape
         SurfaceArea
         Volume
-        
-        % Kinematic geometry information
-        FlowArea
-        FlowDirection
 
     end
     
@@ -32,14 +25,22 @@ classdef Shape < handle
         end
         
         
-        function [] = SetVertices(S,V1,V2,V3,V4)
-            V = [V1(:,1),V2(:,1),V3(:,1),V4(:,1)];
-            S.Left   = min(V,[],2);
-            S.Right  = max(V,[],2);
+        function [] = SetVertices(S,varargin)
             
-            V = [V1(:,2),V2(:,2),V3(:,2),V4(:,2)];
-            S.Top    = max(V,[],2);
-            S.Bottom = min(V,[],2);
+            Nvert = length(varargin);
+            V     = cell2mat(varargin);
+            
+            Vx   = V(:,1:2:end);
+            Vy   = V(:,2:2:end);
+
+
+            R    = Vx.^2 + Vy.^2;
+            Rmin = min(R,[],2);
+            
+            S.V1
+            
+            
+            
         end
 
     end
