@@ -1,14 +1,13 @@
-function Cinter = GetInterfaceIndices(iUp,iDown)
+function Cinter = GetInterfaceIndices(up,down)
     
     % Order the inputs
-    nInter = length(iUp)            ;
-    nMC    = max([iUp(:);iDown(:)]) ;
-    iInter = (1:length(iUp))'       ;
-    one    = iInter./iInter         ;
+    nInter = length(up)            ;
+    nMC    = max([up(:);down(:)]) ;
+    iInter = (1:length(up))'       ;
     
     % Summation matrix
-    Cinter = sparse(iUp(:)  ,iInter,-one,nMC,nInter) + ...
-             sparse(iDown(:),iInter,+one,nMC,nInter);
+    Cinter = sparse(up(:)  ,iInter,-1,nMC,nInter) + ...
+             sparse(down(:),iInter,+1,nMC,nInter);
     
     
 end
