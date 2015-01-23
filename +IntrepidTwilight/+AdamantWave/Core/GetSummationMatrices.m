@@ -52,11 +52,7 @@ function [Ccv,Cmc,Cp,inter] = GetSummationMatrices(fromTo,upDown,zDotN)
         sInter(k+nInter) = -downDotN(k) ;
         
         % Interface control volume
-        if k < 23
             inter(k) = intersect(fromTo(up(k),:),fromTo(down(k),:));
-        else
-            inter(k) = 19;
-        end
     end
     Cp = sparse(iInter,jInter,sInter);
     

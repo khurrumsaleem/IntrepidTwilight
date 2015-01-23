@@ -46,7 +46,6 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
     % Let x = x0
     xNL     = x0;
     rNL     = r0;
-    rNormNL = norm(rNL,2);
     
     % Counters
     IterationsNonlinear = 0;
@@ -125,8 +124,8 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
             
             % Apply all previous projections to new the column
             for m = 1:k-1
-                h      = H(1:N-m+1,m);
-                R(:,k) = [R(1:m-1,k) ; R(m:N,k) - 2*h*(h'*R(m:N,k))];
+                h        = H(1:N-m+1,m);
+                R(m:N,k) = R(m:N,k) - 2*h*(h'*R(m:N,k));
             end
             
             % Get the next Householder vector
@@ -138,13 +137,13 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
             %   Apply projection to R to bring it into upper triangular form;
             %   The triu() call explicitly zeros all strictly lower triangular
             %   components to minimize FP error.
-            R(:,1:k) = triu([R(1:k-1,1:k) ; R(k:N,1:k) - 2 * h * (h'*R(k:N,1:k))]);
+            R(k:N,1:k) = R(k:N,1:k) - 2 * h * (h'*R(k:N,1:k));
             
             % Get the k-th column of the current unitary matrix
             Q(:,k) = [zeros(k-1,1) ; e(1:N-k+1) - 2*h*(h'*e(1:N-k+1))];
             for m = k-1:-1:1
-                hm     = H(1:N-m+1,m);
-                Q(:,k) = [Q(1:m-1,k) ; Q(m:N,k) - 2*hm*(hm'*Q(m:N,k))];
+                hm       = H(1:N-m+1,m);
+                Q(m:N,k) = Q(m:N,k) - 2*hm*(hm'*Q(m:N,k));
             end
             
             % Update residual

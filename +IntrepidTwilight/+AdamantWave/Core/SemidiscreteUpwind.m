@@ -1,9 +1,9 @@
 function f = SemidiscreteUpwind(q,s)
     
     % Conserved quantities
-    rho   = q(1:s.nCV);
-    rhoe  = q((s.nCV+1):(2*s.nCV));
-    rhovz = q((2*s.nCV+1):end);
+    rho   = q(s.rhoMask);
+    rhoe  = q(s.rhoeMask);
+    rhovz = q(s.rhovMask);
     
     % Pull often used values
     from  = s.from  ;
@@ -38,10 +38,8 @@ function f = SemidiscreteUpwind(q,s)
     frhov  = advect + buoy + fric           ;
     
     % Output
-    frho(1)  = (rho(1)-s.qOld(1))/s.dt;
-    frhoe(1) = (rhoe(1)-s.qOld(s.nCV+1))/s.dt;
-    f        = [frho;frhoe;frhov];
-    
+    f = [frho;frhoe;frhov];
+    f = f(s.internalMask);
 
     
 end

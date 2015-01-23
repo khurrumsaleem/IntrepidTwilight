@@ -1,47 +1,17 @@
-function q = SolveClosedLoopSystem(q,params)
+function qNDnew = SolveClosedLoopSystem(q0,s)
     
+    qND = q0 ./ s.qstar;
     
-    % Conserved quantities
-    rhoNow   = q(1:params.nCV);
-    rhoeNow  = q((params.nCV+1):(2*params.nCV));
-    rhovzNow = q((2*params.nCV+1):end);
+    f         = @(q) SemidiscreteUpwind(q.*s.qstar,s);
+    fInternal = @(q) s.dt*f(q)./s.qstar(s.internalMask);
+    rINternal = internalResidual(qND,fInternal,s.internalMask);
+    rBoundary = @(q) [q(1) - q(s.nCV);q(s.nCV+1) - q(2*s.nCV)];
+    r         = @(q)[rBoundary(q);rINternal(q)];
     
+    qNDnew = JFNKHouseholder(1.0001*qND,r,1E-8);
     
-    while true
-    
-    % Thermodynamic properites
-    params.e = rhoeNow ./ rhoNow                    ;
-    params.T = Temperature(rhoNow,params.e,params.T);
-    params.P = Pressure   (rhoNow,params.T)         ;
-    
-    
-    % Update momentum field
-    f = @(rhovz) SemidiscreteUpwindMomentum(rhovz,params);
-    r = @(rhovz) (rhovz - rhovzNow) - params.dt*f(rhovz);
-    rhovzThen = JFNKHouseholder(1.00001*rhovzNow,r,1E-8);
-    
-    % Pull often used values
-    from  = params.from  ;
-    to    = params.to    ;
-    
-    % Get velocities and average density
-    rhoBar = params.volFrom.*rhoNow(from) + params.volTo.*rhoNow(to);
-    vz     = rhovzThen ./ rhoBar ;
-    rhoh   = rhoeNow + params.P ;
-    
-    %   Evolve control volumes
-    frho     = params.Ccv*(vz.*((vz>0).* rhoNow(from) + (vz<=0).*rhoNow(to) )) + params.Srho ;
-    frhoe    = params.Ccv*(vz.*((vz>0).* rhoh(from)   + (vz<=0).*rhoh(to))) + params.Srhoe;
-    rhoThen  = rhoNow  + params.dt*frho  ;
-    rhoeThen = rhoeNow + params.dt*frhoe ;
-    
-    Show(max([norm(params.dt*frho)/norm(rhoNow);norm(params.dt*frhoe)/norm(rhoeNow)]));
-    
-    
-    rhoLimit = 0.98*MaximumDensity();
-    rhoNow   = rhoThen .* (rhoThen < rhoLimit) + (rhoThen >= rhoLimit)*rhoLimit;
-    rhoeNow  = rhoeThen;
-    
-    end
-    
+end
+
+function r = internalResidual(q0,f,mask)
+    r = @(q) q(mask) - q0(mask) - f(q);
 end
