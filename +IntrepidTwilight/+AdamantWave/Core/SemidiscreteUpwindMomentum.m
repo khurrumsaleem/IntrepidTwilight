@@ -1,4 +1,4 @@
-function f = SemidiscreteUpwindMomentum(rhovz,s)
+function frhov = SemidiscreteUpwindMomentum(rhovz,s)
     
     % Pull often used values
     from  = s.from  ;
@@ -21,8 +21,5 @@ function f = SemidiscreteUpwindMomentum(rhovz,s)
     buoy   = s.g.*rhoBar                    ;
     fric   = -s.fFric*s.LoD.*abs(rhovz).*vz ;
     frhov  = advect + buoy + fric           ;
-    
-    % Output
-    f = frhov;
         
 end

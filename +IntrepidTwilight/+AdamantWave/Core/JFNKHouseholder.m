@@ -1,4 +1,4 @@
-function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
+function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
 
     
     % ================================================================= %
@@ -8,6 +8,13 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
     % Length
     N    = length(x0)   ;
     Nmax = N            ;
+    
+    % Constraint check
+    if (nargin < 4)
+        notConstrained = @(x) false;
+    else
+        notConstrained = @(x) any(constraint(x));
+    end
     
     % Tolerances
     LinearTolerance    = 1E-10;
@@ -60,15 +67,26 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
         yk = R(I,I) \ alpha(I)      ;   % Solve the least-squares problem
         dx = Z(:,I) * yk            ;   % Calculate full Newton update
         
-        % Backtracker
-        while (rNormNL < norm(r(xNL + dx),2))
+        %   Relax the step size for a physical solution
+        while notConstrained(xNL + dx)
             dx = relaxor * dx;
+        end
+        
+        % Backtracker
+        rNLnew     = r(xNL + dx)            ;
+        rNormNLnew = norm(rNLnew,2)         ;
+        notDone    = rNormNLnew > rNormNL   ;
+        while notDone
+            dx         = relaxor * dx;
+            rNLnew     = r(xNL + dx);
+            rNormNLnew = norm(rNLnew,2);
+            notDone    = (1 - rNormNLnew/rNormNL) < -1E-4;
         end
         xNL  = xNL + dx ;   % Calculate relaxed x value
         
         % Check non-linear residual
-        rNL     = -r(xNL)       ;
-        rNormNL = norm(rNL,2)   ;
+        rNL     = -rNLnew   ;
+        rNormNL = rNormNLnew;
 
         % Loop break check
         NotDone = rNormNL > NonlinearTolerance;
@@ -92,8 +110,8 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
         
         % Compute Householder vector to bring R(:,1) into upper triangular form
         h      = R(:,1);
-        h      = -sign(h(1)) * norm(h,2) * e(1:N) - h;
-        H(:,1) = h / norm(h,2);
+        h      = norm(h,2) * e(1:N) - h;
+        H(:,1) = h ./ (norm(h) + eps(h));
         
         % Apply projection to R to bring it into upper triangular form
         R(:,1) = R(:,1) - 2 * H(:,1) * (H(:,1)'*R(:,1));
@@ -129,10 +147,10 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
             end
             
             % Get the next Householder vector
-            h            = R(k:N,k)                                 ;
-            h            = -sign(h(1)) * norm(h,2) * e(1:N-k+1) - h ;
-            h            = h ./ (norm(h) + eps(h))                  ;
-            H(1:N-k+1,k) = h                                        ;
+            h            = R(k:N,k)                     ;
+            h            =  norm(h,2) * e(1:N-k+1) - h	;
+            h            = h ./ (norm(h) + eps(h))      ;
+            H(1:N-k+1,k) = h                            ;
             
             %   Apply projection to R to bring it into upper triangular form;
             %   The triu() call explicitly zeros all strictly lower triangular
@@ -160,7 +178,7 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon)
             end
             
         end
-        
-        Nstop    = k        ;
+        R     = triu(R) ; % Explicitly zero the lower triangle
+        Nstop = k       ;
     end
 end

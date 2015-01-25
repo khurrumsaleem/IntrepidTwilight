@@ -39,6 +39,7 @@ s.downDotN = s.zx(s.down).*s.nx + s.zy(s.down).*s.ny ;
 s.nCV      = max([s.from;s.to]);
 s.nMC      = length(s.from);
 s.nInter   = length(s.nx);
+s.nEq      = 2*s.nCV + s.nMC;
 s.fFric    = 0.01;
 s.LoD      = 1;
 
@@ -61,24 +62,34 @@ rhoe = rho0*e0*ones(s.nCV,1);
 rhov = rho0*v0*ones(s.nMC,1);
 
 s.rhoMask  = (1:s.nCV)';
-s.rhoeMask = s.nCV+1+ s.rhoMask ;
+s.rhoeMask = s.nCV+ s.rhoMask ;
 s.rhovMask = (2*s.nCV + (1:s.nMC))';
 
-s.internalMask = [s.rhoMask(2:end);s.rhoeMask(2:end);s.rhovMask(1:end)];
+s.internalMask = [s.rhoMask(1:end);s.rhoeMask(1:end);s.rhovMask(1:end)];
 
 q0 = [rho;rhoe;rhov];
 s.qstar  = q0;
 % f    = @(q) SemidiscreteUpwind(q,s);
 
 % Thermodynamic properites
-% s.rho = rho;
-% s.e = rhoe ./ s.rho         ;
-% s.T = Temperature(s.rho,s.e);
-% s.P = Pressure(s.rho,s.T)   ;
+s.rho = rho;
+s.e = rhoe ./ s.rho         ;
+s.T = Temperature(s.rho,s.e);
+s.P = Pressure(s.rho,s.T)   ;
 
-
-% Jf = CalculateJacobian(@(q)(q - q0) - s.dt*SemidiscreteUpwind(q,s),q0,1E-8*q0);
 q = SolveClosedLoopSystem(q0,s);
+
+% r      = @(q) (q - q0) - s.dt*SemidiscreteUpwind(q,s);
+% Gauger = [1,zeros(1,s.nEq-1);zeros(1,s.nCV),1,zeros(1,s.nMC+s.nCV-1)];
+% qNow = 1.0001*q0;
+% while true
+%     
+%     dRdq = [Gauger;CalculateJacobian(r,qNow,1E-8*qNow)];
+%     dq   = (dRdq'*dRdq) \ (dRdq'*[0;0;r(qNow)]);
+%     qNow = qNow + dq;
+%     
+% end
+
 
 % while true
 %     
