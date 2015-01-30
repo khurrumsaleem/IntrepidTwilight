@@ -12,13 +12,13 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
     % Constraint check
     if (nargin < 4)
         notConstrained = @(x) false;
-    else
+    elseif isa(constraint,'function_handle')
         notConstrained = @(x) any(constraint(x));
     end
     
     % Tolerances
-    LinearTolerance    = 1E-10;
-    NonlinearTolerance = 1E-10;
+    LinearTolerance    = 1E-12;
+    NonlinearTolerance = 1E-12;
 
     % Matrix allocation
     Z = zeros(N,Nmax)   ; % Hold's update basis vectors
@@ -87,6 +87,9 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
         % Check non-linear residual
         rNL     = -rNLnew   ;
         rNormNL = rNormNLnew;
+        
+        fprintf('\t');
+        Show([rNormNL;norm(xNL)]);
 
         % Loop break check
         NotDone = rNormNL > NonlinearTolerance;
