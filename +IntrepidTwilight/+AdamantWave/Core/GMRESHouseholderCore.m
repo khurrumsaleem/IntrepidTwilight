@@ -1,5 +1,5 @@
-function [x,Residuals] = GMRESHouseholderCore(A,r0,x0,Nrestarts,Nmax,Tolerance,nu,...
-        PreConditionerLeft,PreConditionerRight,UnpreconditionRight)
+function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu,...
+        PreConditionerLeft,PreConditionerRight)
     
     % ================================================================================== %
     %                                GMRESHouseholderCore                                %
@@ -28,7 +28,7 @@ function [x,Residuals] = GMRESHouseholderCore(A,r0,x0,Nrestarts,Nmax,Tolerance,n
     % ============================================================= %
     
     % Length of columns and vectors
-    N = length(r0);
+    N = length(b);
     
     % 
     Niterate = (Nrestarts <= Nmax)*Nrestarts + (Nrestarts > Nmax)*Nmax;
@@ -41,13 +41,14 @@ function [x,Residuals] = GMRESHouseholderCore(A,r0,x0,Nrestarts,Nmax,Tolerance,n
     
     % Vector allocation
     e         = [1 ; zeros(N-1,1)]  ; % Unit vector used in creation of Householder vectors
-    alpha     = r0*0                ; % Vector of projected residuals
+    alpha     = b*0                 ; % Vector of projected residuals
     Residuals = zeros(Nmax,1)       ; % All residuals from ASGMRES
     
     % Initial residuals
-    rk      = PreConditionerLeft(r0)    ; % Iterate residual
-    r0Norm  = norm(r0,2)                ; % True initial residual
-    rkNorm  = norm(r0,2)                ; % Iterated initial residual
+    r0      = PreConditionerLeft(b - A*PreConditionerRight(x0));
+    rk      = r0            ; % Iterate residual
+    r0Norm  = norm(r0,2)	; % True initial residual
+    rkNorm  = norm(r0,2)    ; % Iterated initial residual
     
     % Convergence iteration setup
     NotDone      = r0Norm > Tolerance   ;
@@ -72,12 +73,12 @@ function [x,Residuals] = GMRESHouseholderCore(A,r0,x0,Nrestarts,Nmax,Tolerance,n
         Z(:,1) = rk / rkNorm ;
         
         % Compute A*z1 and store in R
-        Z(:,1) = PreConditionerRight(Z(:,1));
-        R(:,1) = PreConditionerLeft (A*Z(:,1))   ;
+        w      = PreConditionerRight(Z(:,1))    ;
+        R(:,1) = PreConditionerLeft (A*w)       ;
         
         % Compute Householder vector for R(:,1)
         h      = R(:,1);
-        h      = -sign(h(1)) * norm(h,2) * e(1:N) - h;
+        h      = -Signum(h(1)) * norm(h,2) * e(1:N) - h;
         H(:,1) = h / norm(h,2);
         
         % Bring R into upper triangular form via projection
@@ -104,11 +105,11 @@ function [x,Residuals] = GMRESHouseholderCore(A,r0,x0,Nrestarts,Nmax,Tolerance,n
         % ---------------------------------------------------- %
         for k = 2:Niterate
             
-            if rkNorm <= nu*rkm1Norm
+%             if rkNorm <= nu*rkm1Norm
                 Z(:,k) = rk/rkNorm;
-            else
-                Z(:,k) = Q(:,k-1);
-            end
+%             else
+%                 Z(:,k) = Q(:,k-1);
+%             end
             
             % Compute and store A*zk in R
             w      = PreConditionerRight(Z(:,k));
@@ -121,7 +122,7 @@ function [x,Residuals] = GMRESHouseholderCore(A,r0,x0,Nrestarts,Nmax,Tolerance,n
             
             % Get the next Householder vector
             h            = R(k:N,k)                                 ;
-            h            = -sign(h(1)) * norm(h,2) * e(1:N-k+1) - h ;
+            h            = -Signum(h(1)) * norm(h,2) * e(1:N-k+1) - h ;
             h            = h / norm(h)                              ;
             H(1:N-k+1,k) = h                                        ;
             
@@ -177,19 +178,27 @@ function [x,Residuals] = GMRESHouseholderCore(A,r0,x0,Nrestarts,Nmax,Tolerance,n
         % Update solution
 
         % Solve the least-squares problem
-        dx = triu(R(1:k,1:k)) \ alpha(1:k);
+        omega = triu(R(1:k,1:k)) \ alpha(1:k);
     
         % Calculate actual shift of guess
-        dx = PreConditionerRight(Z(:,1:k)*dx);
+        dx = Z(:,1:k)*omega;
         x  = x + dx;
-        
-        % Apply right-preconditioner
-%         x = PreConditionerRight(x);
         
         if (nargout > 1)
             Residuals = Residuals(1:n-1);
         end
         
     end
+    
+    % Apply right-preconditioner to transform back to A*x = b
+    x = PreConditionerRight(x);
 
+end
+
+function s = Signum(s)
+    if (s ~= 0)
+        s = sign(s);
+    else
+        s = 1;
+    end
 end

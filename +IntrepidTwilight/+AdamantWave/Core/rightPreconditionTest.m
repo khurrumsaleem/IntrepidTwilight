@@ -13,10 +13,12 @@ b = A*x;
 % [xMine1,rezMine1] = GMRESHouseholderCore(A,b,zeros(N,1),50,50*100,8E-5,0.85,@(v)v,@(v)v);
 
 [xMat2,~,~,~,rezMat2] = gmres(A,b,50,1E-8,100,T);
-[xMine2,rezMine2] = GMRESHouseholderCore(A,b,zeros(N,1),50,50*100,1E-8,0.85,@(v)v,@(v)T\v,@(v)T*v);
+[xMine2,rezMine2] = GMRESHouseholderCore(A,b,zeros(N,1),50,50*100,1E-8,0.85,@(v)v,@(v)T\v);
 
 
 % figure(1)
 %     loglog(1:length(rezMat1),rezMat1,1:length(rezMine1),rezMine1,'o');
 figure(2);
     loglog(1:length(rezMat2),rezMat2,1:length(rezMine2),rezMine2,'o');
+    
+disp([xMine2(1),xMat2(1),x(1)]);
