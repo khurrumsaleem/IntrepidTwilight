@@ -52,7 +52,6 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
     
     % Convergence iteration setup
     NotDone      = r0Norm > Tolerance   ;
-    Tolerance    = r0Norm * Tolerance   ;
     Iterations   = 0                    ;
     Residuals(1) = r0Norm               ;
     n            = 2                    ;
@@ -105,36 +104,35 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
         % ---------------------------------------------------- %
         for k = 2:Niterate
             
-%             if rkNorm <= nu*rkm1Norm
+            if rkNorm <= nu*rkm1Norm
                 Z(:,k) = rk/rkNorm;
-%             else
-%                 Z(:,k) = Q(:,k-1);
-%             end
+            else
+                Z(:,k) = Q(:,k-1);
+            end
             
             % Compute and store A*zk in R
-            w      = PreConditionerRight(Z(:,k));
-            R(:,k) = PreConditionerLeft (A*w)   ;
+            R(:,k) = PreConditionerLeft(A*PreConditionerRight(Z(:,k)));
             
             % Apply all previous projections to new the column
             for m = 1:k-1
-                R(m:N,k) = R(m:N,k) - 2*H(1:N-m+1,m)*(H(1:N-m+1,m)'*R(m:N,k));
+                R(:,k) = R(:,k) - 2*H(:,m)*(H(:,m)'*R(:,k));
             end
             
             % Get the next Householder vector
-            h            = R(k:N,k)                                 ;
-            h            = -Signum(h(1)) * norm(h,2) * e(1:N-k+1) - h ;
-            h            = h / norm(h)                              ;
-            H(1:N-k+1,k) = h                                        ;
+            h        = R(k:N,k)                                     ;
+            h        = -Signum(h(1)) * norm(h,2) * e(1:N-k+1) - h   ;
+            h        = h / norm(h)                                  ;
+            H(k:N,k) = h                                            ;
             
             %   Apply projection to R to bring it into upper triangular form;
             %   The triu() call explicitly zeros all strictly lower triangular
             %   components to minimize FP error.
-            R(k:N,1:k) = R(k:N,1:k) - 2 * h * (h'*R(k:N,1:k));
+            R(:,1:k) = R(:,1:k) - 2 * H(:,k) * (H(:,k)'*R(:,1:k));
             
             % Get the k-th column of the current unitary matrix
             Q(:,k) = [zeros(k-1,1) ; e(1:N-k+1) - 2*h*(h'*e(1:N-k+1))];
             for m = k-1:-1:1
-                Q(m:N,k) = Q(m:N,k) - 2*H(1:N-m+1,m)*(H(1:N-m+1,m)'*Q(m:N,k));
+                Q(:,k) = Q(:,k) - 2*H(:,m)*(H(:,m)'*Q(:,k));
             end
             
             % Update residual
