@@ -1,4 +1,5 @@
-function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
+function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,...
+        constraint,preconditioner)
 
     
     % ================================================================= %
@@ -10,9 +11,9 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
     Nmax = N            ;
     
     % Constraint check
-    if (nargin < 4)
-        notConstrained = @(x) false;
-    elseif isa(constraint,'function_handle')
+    if (nargin < 4) || not(isa(constraint,'function_handle'))
+        notConstrained = @(x) false();
+    else
         notConstrained = @(x) any(constraint(x));
     end
     
@@ -31,7 +32,7 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
     alpha = zeros(N,1)          ;
 
     % Threshold parameter used to determine which basis to use in the GMRES iterations
-    nu = 0.85;
+    nu = 0.15;
 
 
 
@@ -60,12 +61,7 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
     while NotDone
         
         % Solve linear system
-        Nstop = GMRES(xNL,rNL,rNormNL);   % Solve the linear system to LinearTolerance
-        I     = 1:Nstop             ;   % Vector of Indices for the solve
-        
-        % Update x
-        yk = R(I,I) \ alpha(I)      ;   % Solve the least-squares problem
-        dx = Z(:,I) * yk            ;   % Calculate full Newton update
+        dx = GMRES(xNL,rNL,rNormNL);   % Solve the linear system to LinearTolerance
         
         %   Relax the step size for a physical solution
         while notConstrained(xNL + dx)
@@ -103,18 +99,19 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
     % ================================================================= %
     %                          GMRES SubFunction                        %
     % ================================================================= %
-    function Nstop = GMRES(xk,rk0,rk0Norm)
+    function dx = GMRES(xk,rk0,rk0Norm)
         
         Z(:,1) = rk0 / rk0Norm ; % First basis vector for update
         
         % First Step (k = 1)
         % Compute J*z1 and store in R
-        R(:,1) = (r(xk + epsilon*Z(:,1)) + rk0) / epsilon;
+        w      = preconditioner(Z(:,1));
+        R(:,1) = (r(xk + epsilon*w) + rk0) / epsilon;
         
         % Compute Householder vector to bring R(:,1) into upper triangular form
         h      = R(:,1);
-        h      = norm(h,2) * e(1:N) - h;
-        H(:,1) = h ./ (norm(h) + eps(h));
+        h      = -Signum(h(1))*norm(h,2)*e(1:N) - h;
+        H(:,1) = h ./ (norm(h,2) + eps(h));
         
         % Apply projection to R to bring it into upper triangular form
         R(:,1) = R(:,1) - 2 * H(:,1) * (H(:,1)'*R(:,1));
@@ -141,30 +138,27 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
             end
             
             % Compute and store A*zk in R
-            R(:,k) = (r(xk + epsilon*Z(:,k)) + rk0) / epsilon;
+            w      = preconditioner(Z(:,k));
+            R(:,k) = (r(xk + epsilon*w) + rk0) / epsilon;
             
             % Apply all previous projections to new the column
             for m = 1:k-1
-                h        = H(1:N-m+1,m);
-                R(m:N,k) = R(m:N,k) - 2*h*(h'*R(m:N,k));
+                R(:,k) = R(:,k) - H(:,m)*(2*H(:,m)'*R(:,k));
             end
             
             % Get the next Householder vector
-            h            = R(k:N,k)                     ;
-            h            =  norm(h,2) * e(1:N-k+1) - h	;
-            h            = h ./ (norm(h) + eps(h))      ;
-            H(1:N-k+1,k) = h                            ;
+            h        = R(k:N,k)                                 ;
+            h        = -Signum(h(1))*norm(h,2)*e(1:N-k+1) - h	;
+            h        = h ./ (norm(h,2) + eps(h))                ;
+            H(k:N,k) = h                                        ;
             
             %   Apply projection to R to bring it into upper triangular form;
-            %   The triu() call explicitly zeros all strictly lower triangular
-            %   components to minimize FP error.
-            R(k:N,1:k) = R(k:N,1:k) - 2 * h * (h'*R(k:N,1:k));
+            R(:,1:k) = R(:,1:k) - H(:,k) * (2*H(:,k)'*R(:,1:k));
             
             % Get the k-th column of the current unitary matrix
-            Q(:,k) = [zeros(k-1,1) ; e(1:N-k+1) - 2*h*(h'*e(1:N-k+1))];
+            Q(:,k) = [zeros(k-1,1) ; e(1:N-k+1) - h*(2*h'*e(1:N-k+1))];
             for m = k-1:-1:1
-                hm       = H(1:N-m+1,m);
-                Q(m:N,k) = Q(m:N,k) - 2*hm*(hm'*Q(m:N,k));
+                Q(:,k) = Q(:,k) - H(:,m)*(2*H(:,m)'*Q(:,k));
             end
             
             % Update residual
@@ -181,7 +175,18 @@ function [xNL,IterationsNonlinear] = JFNKHouseholder(x0,r,epsilon,constraint)
             end
             
         end
-        R     = triu(R) ; % Explicitly zero the lower triangle
-        Nstop = k       ;
+        
+        % Update to x
+        yk = triu(R(1:k,1:k)) \ alpha(1:k)  ;   % Solve the least-squares problem
+        dx = Z(:,1:k) * yk                  ;   % Calculate full Newton update
+        dx = preconditioner(dx)             ;
+    end
+end
+
+function s = Signum(s)
+    if (s ~= 0)
+        s = sign(s);
+    else
+        s = 1;
     end
 end
