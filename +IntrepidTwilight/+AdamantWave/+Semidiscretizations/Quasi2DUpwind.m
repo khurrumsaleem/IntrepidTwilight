@@ -74,23 +74,29 @@ function q2Dup = Quasi2DUpwind(parameters)
     
     
     function [] = updateClosureEnvironment()
-        
+        updateVelcoity();
+        updateThermodynamics();
+    end
+    
+    function [] = updateVelcoity()
         % Get average density and CV surface velocities
         rhoBar = back.*rho(from) + front.*rho(to);
         v     = rhov ./ rhoBar ;
-        
-        
+    end
+    
+    function [] = updateThermodynamics()
         % Thermodynamic properites
         TD.e    = rhoe ./ rho               ;
         TD.T    = Temperature(rho,TD.e,TD.T);
         TD.P    = Pressure(rho,TD.T)        ;
         TD.rhoh = rhoe + TD.P               ;
-        
     end
-    
-    
-    
-    
+
+
+
+
+
+
     %{
     ===========================================================
                              Mass RHS
@@ -140,7 +146,7 @@ function q2Dup = Quasi2DUpwind(parameters)
         % Upwind/downwind momentum advection
         fup   = rhov(up)  .*(v(up)  .*upDotN)   ;
         fdown = rhov(down).*(v(down).*downDotN) ;
-        fmom  = sign(vavg).*(fdown - fup)           ;
+        fmom  = sign(vavg).*(fdown - fup)       ;
         
         % Pieces
         advect = (Cmc*(fmom.*Ainter) + Cinter*(TD.P(iInter).*Ainter));
