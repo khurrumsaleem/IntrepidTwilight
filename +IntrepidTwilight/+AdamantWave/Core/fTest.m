@@ -1,6 +1,5 @@
 clc;
-clear();
-import IntrepidTwilight.AdamantWave.Semidiscretizations.Quasi2DUpwind.*;
+clear;
 
 r2 = cos(pi/4);
 s2 = sqrt(2);
@@ -29,61 +28,81 @@ s.down     = [  2,  3,   4,   5,   6,   1,   7,   7,   5,   6]';
 s.nx       = [+r2,  1, +r2, -r2,  -1, -r2, +r2, -r2, +r2, -r2]';
 s.ny       = [-r2,  0, +r2, +r2,   0, -r2, +r2, +r2, +r2, +r2]';
 s.Ainter   = [ s2,1/2, +s2,  s2, 1/2,  s2,  r2,  r2,  r2,  r2]';
-s.volFrom  = [1/2,1/2, 3/8, 1/2, 1/2, 3/8, 1/4]';
-s.volTo    = [1/2,3/8, 1/2, 1/2, 3/8, 1/2, 1/4]';
+s.back     = [1/2,1/2, 3/8, 1/2, 1/2, 3/8, 1/4]';
+s.front    = [1/2,3/8, 1/2, 1/2, 3/8, 1/2, 1/4]';
 
-s.volTot   = (s.volFrom + s.volTo);
-s.volFrom  = s.volFrom./s.volTot;
-s.volTo    = s.volTo  ./s.volTot;
+s.volTot   = (s.back + s.front);
+s.back     = s.back  ./ s.volTot;
+s.front    = s.front ./ s.volTot;
 s.upDotN   = s.zx(s.up)  .*s.nx + s.zy(s.up)  .*s.ny  ;
 s.downDotN = s.zx(s.down).*s.nx + s.zy(s.down).*s.ny ;
 s.nCV      = max([s.from;s.to]);
 s.nMC      = length(s.from);
 s.nInter   = length(s.nx);
 s.nEq      = 2*s.nCV + s.nMC;
-s.fFric    = 0.01;
+s.friction = 0.01;
 s.LoD      = 1;
 
 s.theta = atan(s.zy./s.zx);
 s.g     = 9.81*cos(s.theta + pi/2);
 
-[s.Ccv,s.Cmc,s.Cp,s.inter] = GetSummationMatrices([s.from,s.to],[s.up,s.down],[s.upDotN,s.downDotN]);
+[s.Ccv,s.Cmc,s.Cinter,s.iInter] = GetSummationMatrices([s.from,s.to],[s.up,s.down],[s.upDotN,s.downDotN]);
 
 % s.Ccv(7,1) = -1;
 
-s.Srho  = 0;
-s.Srhoe = 10E6*[-1;0;0;1;0;0];
+s.sRho  = 0;
+s.sRhov = 0;
+s.sRhoe = 10E6*[-1;0;0;1;0;0];
 
 s.dt = 0.20;
 rho0 = 9.965569351080000e+02;
 e0   = 1.125536123942350e+05;
 v0   = 0.01;
-rho  = rho0*ones(s.nCV,1);
-rhoe = rho0*e0*ones(s.nCV,1);
-rhov = rho0*v0*ones(s.nMC,1);
+s.rho0  = rho0*ones(s.nCV,1);
+s.rhoe0 = rho0*e0*ones(s.nCV,1);
+s.rhov0 = rho0*v0*ones(s.nMC,1);
 
-rhov(1) = 10*rhov(1);
+s.rhov0(1) = 10*s.rhov0(1);
 
-s.rhoMask  = (1:s.nCV)';
-s.rhoeMask = s.nCV+ s.rhoMask ;
-s.rhovMask = (2*s.nCV + (1:s.nMC))';
+s.q0 = [s.rho0;s.rhoe0;s.rhov0];
 
-s.internalMask = [s.rhoMask(1:end);s.rhoeMask(1:end);s.rhovMask(1:end)];
+s.iRho  = (1:s.nCV)';
+s.iRhoe = s.nCV+ s.iRho ;
+s.iRhov = (2*s.nCV + (1:s.nMC))';
 
-q0      = [rho;rhoe;rhov]   ;
-qstar   = q0                ;
-s.qstar = qstar             ;
-% f    = @(q) SemidiscreteUpwind(q,s);
 
 % Thermodynamic properites
-s.rho = rho;
-s.e = rhoe ./ s.rho         ;
-s.T = Temperature(s.rho,s.e);
-s.P = Pressure(s.rho,s.T)   ;
+s.e = s.rhoe0 ./ s.rho0     ;
+s.T = Temperature(s.rho0,s.e);
+s.P = Pressure(s.rho0,s.T)   ;
+
+
+s.epsilon = 5E-4;
+
+blah = 'Semidiscretizations';
+
+upwind1 = IntrepidTwilight.AdamantWave.(blah).Quasi2DUpwind(s);
+upwind2 = IntrepidTwilight.AdamantWave.Semidiscretizations.Quasi2DUpwind(s);
+
+
+%{
+
+%   Jacobian sensistivity to epsilon 1E-4 or 1E-5 look good.
+
+epsilons = 10.^((-3:-1:-10)')        ;
+df       = zeros(length(epsilons),1) ;
+for k = 1:length(epsilons)
+    s.epsilon = epsilons(k);
+    upwind    = IntrepidTwilight.AdamantWave.Semidiscretizations.Quasi2DUpwind(s);
+    df(k)     = norm(upwind.blockDiagonalJacobian(s.q0));
+end
+loglog(epsilons,df);
+%}
+
 
 % r    = @(qND) (qND - q0./qstar) - s.dt*SemidiscreteUpwind(qND.*qstar,s)./qstar;
-r    = @(q) (q - q0) - s.dt*SemidiscreteUpwind(q,s);
-drdq = CalculateJacobian(r,q0,1E-8*q0);
+% r    = @(q) (q - q0) - s.dt*SemidiscreteUpwind(q,s);
+% drdq = CalculateJacobian(r,q0,1E-8*q0);
 
 
 %{
