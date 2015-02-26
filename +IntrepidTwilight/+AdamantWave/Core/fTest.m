@@ -79,11 +79,8 @@ s.P = Pressure(s.rho0,s.T)   ;
 
 s.epsilon = 5E-4;
 
-blah = 'Semidiscretizations';
-
-upwind1 = IntrepidTwilight.AdamantWave.(blah).Quasi2DUpwind(s);
-upwind2 = IntrepidTwilight.AdamantWave.Semidiscretizations.Quasi2DUpwind(s);
-
+upwind = IntrepidTwilight.AdamantWave.Semidiscretizations.Quasi2DUpwind(s);
+df     = upwind.blockDiagonalJacobian(s.q0);
 
 %{
 

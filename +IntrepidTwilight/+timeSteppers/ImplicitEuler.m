@@ -2,7 +2,7 @@ function ie = ImplicitEuler(parameters)
     
     f = parameters.f;
     
-    ie = @(q,qOld) f(q);
-    
+    ie.deltaq = @(q) f(q);
+    ie.qOldUpdate = @(qold) [] ;
     
 end

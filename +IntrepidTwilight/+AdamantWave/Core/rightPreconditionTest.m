@@ -13,10 +13,14 @@
 % [xMine1,rezMine1] = GMRESHouseholderCore(A,b,zeros(N,1),50,50*100,8E-5,0.85,@(v)v,@(v)v);
 
 tic;
-[xMat2,~,~,~,rezMat2] = gmres(A,b,50,1E-8,100,T);
+for k = 1:100
+    [xMat2,~,~,~,rezMat2] = gmres(A,b,50,1E-8,100,T);
+end
 toc;
 tic;
-[xMine2,rezMine2] = GMRESHouseholderCore(A,b,zeros(N,1),50,50*100,1.503E-5,0.15,@(v)T\v,@(v)v);
+for k = 1:100
+    [xMine2,rezMine2] = GMRESHouseholderCoreEconomy(A,b,zeros(N,1),50,50*100,1E-4,0.15,@(v)T\v,@(v)v);
+end
 toc;
 
 

@@ -1,4 +1,4 @@
-function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu,...
+function [x,Residuals] = GMRESHouseholderCoreEconomy(A,b,x0,Nrestarts,Nmax,Tolerance,nu,...
         PreConditionerLeft,PreConditionerRight)
     
     % ================================================================================== %
@@ -36,7 +36,6 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
     % Matrix allocation
     Z(N,Niterate) = 0   ;   % Update's basis vectors
     H(N,Niterate) = 0   ;   % Householder vectors for projections
-    Q(N,Niterate) = 0   ;   % Unitary matrix columns of QR decomposition
     R(N,Niterate) = 0   ;   % Upper-triangular matrix for least squares problem
     
     % Vector allocation
@@ -44,6 +43,7 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
     e            = [1 ; Zeros]  ; % Unit vector used in creation of Householder vectors
     alpha        = b*0          ; % Vector of projected residuals
     Residuals    = [0 ; Zeros]  ; % All residuals from ASGMRES
+    Q            = Residuals    ;
     
     % Initial residuals
     r0      = PreConditionerLeft(b - A*PreConditionerRight(x0));
@@ -77,19 +77,21 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
         R(:,1) = PreConditionerLeft (A*w)       ;
         
         % Compute Householder vector for R(:,1)
+        e      = [1 ; Zeros]  ;
         h      = R(:,1);
-        h      = -Signum(h(1)) * norm(h,2) * e(1:N) - h;
+        h      = -Signum(h(1)) * norm(h,2) * e - h;
         H(:,1) = h / norm(h,2);
         
         % Bring R into upper triangular form via projection
         R(:,1) = R(:,1) - 2 * H(:,1) * (H(:,1)'*R(:,1));
         
         % Get the first column of the unitary matrix
-        Q(:,1) = e - 2 * H(:,1) * (H(:,1)'*e);
+        Q = e - 2 * H(:,1) * (H(:,1)'*e);
+        e = e(1:N-1);
         
         % Residual update
-        alpha(1) = Q(:,1)'*rk           ; % Projected residual
-        rk       = rk - alpha(1)*Q(:,1) ; % True b - A*(x+dx) residual
+        alpha(1) = Q'*rk           ; % Projected residual
+        rk       = rk - alpha(1)*Q; % True b - A*(x+dx) residual
         
         % Starting and current residual norms used for choice of next basis vector
         rkm1Norm = rkNorm       ;
@@ -108,12 +110,12 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
             if rkNorm <= nu*rkm1Norm
                 Z(:,k) = rk/rkNorm;
             else
-                Z(:,k) = Q(:,k-1);
+                Z(:,k) = Q;
             end
+
             
             % Compute and store A*zk in R
             R(:,k) = PreConditionerLeft(A*PreConditionerRight(Z(:,k)));
-            
             % Apply all previous projections to new the column
             for m = 1:k-1
                 R(:,k) = R(:,k) - 2*H(:,m)*(H(:,m)'*R(:,k));
@@ -121,24 +123,27 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
             
             % Get the next Householder vector
             h        = R(k:N,k)                                     ;
-            h        = -Signum(h(1)) * norm(h,2) * e(1:N-k+1) - h   ;
+            h        = -Signum(h(1)) * norm(h,2) * e - h   ;
             h        = h / norm(h)                                  ;
             H(k:N,k) = h                                            ;
             
             %   Apply projection to R to bring it into upper triangular form;
             %   The triu() call explicitly zeros all strictly lower triangular
             %   components to minimize FP error.
-            R(:,1:k) = R(:,1:k) - 2 * H(:,k) * (H(:,k)'*R(:,1:k));
-            
-            % Get the k-th column of the current unitary matrix
-            Q(:,k) = [zeros(k-1,1) ; e(1:N-k+1) - 2*h*(h'*e(1:N-k+1))];
-            for m = k-1:-1:1
-                Q(:,k) = Q(:,k) - 2*H(:,m)*(H(:,m)'*Q(:,k));
+            for m = 1:k
+                R(:,m) = R(:,m) - 2 * H(:,k) * (H(:,k)'*R(:,m));
             end
             
+            % Get the k-th column of the current unitary matrix
+            Q = [Zeros(1:k-1) ; e - 2*h*(h'*e)];
+            for m = k-1:-1:1
+                Q = Q - 2*H(:,m)*(H(:,m)'*Q);
+            end
+            e = e(1:end-1);
+            
             % Update residual
-            alpha(k) = Q(:,k)'*rk               ;
-            rk       = rk - alpha(k)*Q(:,k)     ;
+            alpha(k) = Q'*rk               ;
+            rk       = rk - alpha(k)*Q     ;
             
             % Reassign previous residuals
             rkm1Norm = rkNorm;
