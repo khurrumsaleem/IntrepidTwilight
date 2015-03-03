@@ -12,11 +12,14 @@
 % [xMat1,~,~,~,rezMat1] = gmres(A,b,50,1E-8,100);
 % [xMine1,rezMine1] = GMRESHouseholderCore(A,b,zeros(N,1),50,50*100,8E-5,0.85,@(v)v,@(v)v);
 
-tic;
-for k = 1:100
-    [xMat2,~,~,~,rezMat2] = gmres(A,b,50,1E-8,100,T);
-end
-toc;
+% GMRESObj = IntrepidTwilight.solvers.MakeGMRES(50,50*100,1E-4,0.15,@(v)T\v,@(v)v);
+
+% tic;
+% for k = 1:100
+% %     [xMat2,~,~,~,rezMat2] = gmres(A,b,50,1E-8,100,@(v)T\v);
+%     [xMine1,rezMine1] = GMRESObj(A,b,zeros(N,1));
+% end
+% toc;
 tic;
 for k = 1:100
     [xMine2,rezMine2] = GMRESHouseholderCoreEconomy(A,b,zeros(N,1),50,50*100,1E-4,0.15,@(v)T\v,@(v)v);
@@ -26,7 +29,7 @@ toc;
 
 % figure(1)
 %     loglog(1:length(rezMat1),rezMat1,1:length(rezMine1),rezMine1,'o');
-figure(2);
-    loglog(1:length(rezMat2),rezMat2,1:length(rezMine2),rezMine2,'o');
-    
-disp([rezMat2(end),rezMine2(end)]);
+% figure(2);
+%     loglog(1:length(rezMine1),rezMine1,1:length(rezMine2),rezMine2,'o');
+%     
+% disp([rezMine1(end),rezMine2(end)]);
