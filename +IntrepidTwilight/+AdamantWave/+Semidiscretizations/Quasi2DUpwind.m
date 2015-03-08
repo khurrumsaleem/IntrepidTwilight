@@ -1,4 +1,4 @@
-function q2Dup = Quasi2DUpwind(parameters)
+function q2Dup = Quasi2DUpwind(problem)
     
     % Return closure
     q2Dup.rhs                   = @(q) rhs(q);
@@ -6,53 +6,86 @@ function q2Dup = Quasi2DUpwind(parameters)
     
     
     
-    nCV = parameters.nCV;
-    nMC = parameters.nMC;
+    % ======================================================================= %
+    %                            Parameter unpacking                          %
+    % ======================================================================= %
+    
+    
+    
+    nCV = problem.miscellaneous.nCV;
+    nMC = problem.miscellaneous.nMC;
     
     % Conserved quantities
-    rho  = parameters.rho0   ;
-    rhoe = parameters.rhoe0  ;
-    rhov = parameters.rhov0  ;
+    rho  = problem.initialState.rho0   ;
+    rhoe = problem.initialState.rhoe0  ;
+    rhov = problem.initialState.rhov0  ;
     
     % Indices
-    iRho  = parameters.iRho  ;
-    iRhov = parameters.iRhov ;
-    iRhoe = parameters.iRhoe ;
-    from  = parameters.from  ;
-    to    = parameters.to    ;
-    back  = parameters.back  ;
-    front = parameters.front ;
-    up    = parameters.up    ;
-    down  = parameters.down  ;
+    iRho  = problem.miscellaneous.iRho  ;
+    iRhov = problem.miscellaneous.iRhov ;
+    iRhoe = problem.miscellaneous.iRhoe ;
+    from  = problem.geometry.from       ;
+    to    = problem.geometry.to         ;
+    up    = problem.geometry.up         ;
+    down  = problem.geometry.down       ;
     
-    % Dot products
-    upDotN   = parameters.upDotN     ;
-    downDotN = parameters.downDotN   ;
-    
-    % Connectivity/Summation matrices
-    Ccv  = parameters.Ccv    ;
-    Cmc  = parameters.Cmc    ;
+    % Volumes of momentum cells
+    volumeBack  = problem.geometry.volumeBack       ;
+    volumeFront = problem.geometry.volumeFront      ;
     
     % Interface parameters
-    Cinter = parameters.Cinter   ;
-    iInter = parameters.iInter   ;
-    Ainter = parameters.Ainter   ;
+    Ainter = problem.geometry.Ainter   ;
     
     % Sources
-    sRho  = parameters.sRho  ;
-    sRhoe = parameters.sRhoe ;
-    sRhov = parameters.sRhov ;
+    sRho  = problem.miscellaneous.sRho  ;
+    sRhoe = problem.miscellaneous.sRhoe ;
+    sRhov = problem.miscellaneous.sRhov ;
     
     % Momentum 
-    friction = parameters.friction;
-    LoD      = parameters.LoD;
-    g        = parameters.g;
+    friction = problem.miscellaneous.friction;
+    LoD      = problem.geometry.LoD;
+
     
-    % 
-    epsilon  = parameters.epsilon;
+    % ======================================================================= %
+    %                            Parameter calculating                        %
+    % ======================================================================= %
+    
+    % Amounts of stuff
+    nCV    = max([from;to])             ;
+    nMC    = length(from)               ;
+%     nInter = length(problem.geometry.nx);
+%     nEq    = 2*nCV + nMC                ;
+
+
+    % Normalized (fractional volume) of momentum cells
+    volTotal     = volumeBack + volumeFront;
+    volumeBack   = volumeBack  ./ volTotal;
+    volumeFront  = volumeFront ./ volTotal;
+
+
+    % Momentum cell-Interface dots
+    upDotN   =  problem.geometry.zx(up)  .*problem.geometry.nx  + ...
+                problem.geometry.zy(up)  .*problem.geometry.ny  ;
+    downDotN =  problem.geometry.zx(down).*problem.geometry.nx  + ...
+                problem.geometry.zy(down).*problem.geometry.ny  ;
+
+
+    % Gravity
+    theta = atan(problem.geometry.zy./problem.geometry.zx);
+    g     = 9.81*cos(theta + pi/2);
+
+
+    % Summation matrices
+    [Ccv,Cmc,Cinter,iInter] = ...
+        IntrepidTwilight.AdamantWave.toolbox.GetSummationMatrices([from,to],[up,down],[upDotN,downDotN]);    
+
+
+    %   Jacobi finite difference epsilon
+    epsilon  = problem.miscellaneous.epsilon;
     plusEps  = 1 + epsilon;
     minusEps = 1 - epsilon;
-    
+
+
     % Initialization for inclusion into the closure environment
     rhoBar = 0;
     v      = 0;
@@ -61,11 +94,12 @@ function q2Dup = Quasi2DUpwind(parameters)
     %   Create a Thermodynamic struct TD (used for passing 
     %   already-calculated properties to constituitive relations)
     TD.e    = rhoe ./ rho                       ;
-    TD.T    = Temperature(rho,TD.e,parameters.T);
+    TD.T    = Temperature(rho,TD.e,problem.initialState.T);
     TD.P    = Pressure(rho,TD.T)                ;
     TD.rhoh = rhoe + TD.P                       ;
-    
-    
+
+
+
     function f = rhs(q)
         
         % Pull conserved values
@@ -89,7 +123,7 @@ function q2Dup = Quasi2DUpwind(parameters)
     
     function [] = updateVelocity()
         % Get average density and CV surface velocities
-        rhoBar = back.*rho(from) + front.*rho(to);
+        rhoBar = volumeBack.*rho(from) + volumeFront.*rho(to);
         v     = rhov ./ rhoBar ;
     end
     
