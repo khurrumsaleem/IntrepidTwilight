@@ -53,7 +53,7 @@ function sim = Simulation(problem)
         %   Save index
         k = 2;
         
-        while (t <= tFinish)
+        while ( abs(t - tFinish) > eps() )
             
             if     ( abs((t+dt) - tSave(k)) > eps() )
                 step     = dt       ;

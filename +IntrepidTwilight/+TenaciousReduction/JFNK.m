@@ -47,7 +47,8 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
     relaxor = 0.5;
     
     % Determine if the loop is needed
-    NotDone = rNormNL > NonlinearTolerance;
+    NotDone          = rNormNL > NonlinearTolerance ;
+    stagnantResidual = false()                      ;
     
     % Let x = x0
     xNL     = x0;
@@ -56,8 +57,9 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
     %   Initialize preconditioner
     preconditioner.update(xNL);
     
-    % Counters
-    iterationsNL = 0;
+    % Counter and residual
+    n                     = 1;
+    residualVector(100,1) = 0;
     
     while NotDone
         
@@ -85,20 +87,26 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
 
         
         % Check non-linear residual
-        rNL     = -rNLnew   ;
-        rNormNL = rNormNLnew;
+        rNL               = -rNLnew     ;
+        rNormNL           = rNormNLnew  ;
+        residualVector(n) = rNormNL     ;
         
         %   Allow preconditioner to do some post-update work
-%         preconditioner.update(xNL);
+        %  preconditioner.update(xNL);
 
         % Loop break check
-        NotDone      = rNormNL > NonlinearTolerance ;
-        iterationsNL = iterationsNL + 1             ;
-%         fprintf('\t\t\t%5.2E\n',rNormNL);
+        if (n > 4)
+            stagnantResidual = abs(mean(residualVector(n-4:n)) - rNormNL)/rNormNL < 1E-3;
+        end
+        
+        
+        NotDone = (rNormNL > NonlinearTolerance) && not(stagnantResidual) ;
+        n       = n + 1             ;
+        fprintf('\t\t\t%5.2E\t%5.2E\n',rNormNL,norm(dx,2));
     end
     
     if (nargout > 1)
-        stats.iterations = iterationsNL ;
+        stats.iterations = n - 1 ;
         stats.norm       = rNormNL      ;
         varargout{1}     = stats        ;
     end
