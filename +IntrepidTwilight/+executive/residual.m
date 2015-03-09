@@ -1,14 +1,9 @@
-function r = residual(problem)
+function r = Residual(problem)
 
-    %   Build semi-discretization closure
-    closure = ['toolbox.timeSteppers.',problem.timeStepper]             ;
-    ts      = IntrepidTwilight.executive.buildClosure(closure,problem)  ;
+    r  = @(dt) @(q) value(q,dt) ;
     
-    %   Build time-stepper closure
-    closure = ['toolbox.timeSteppers.',problem.timeStepper]             ;
-    ts      = IntrepidTwilight.executive.buildClosure(closure,problem)  ;
-
-
-    r       = @(q) (q - ts.qLast()) - ts.deltaq(q)                      ;
+    function r = value(q,dt)
+        r = (q - problem.timeStepper.closure.qLast()) - problem.timeStepper.closure.deltaq(q,dt);
+    end
     
 end

@@ -9,9 +9,7 @@ function item = build(buildWhat,problem)
             stepper = problem.timeStepper.name;
             
             if which(['IntrepidTwilight.TransientStride.',stepper])
-                f    = problem.semidiscretization.closure;
-                dt   = problem.timeStepper.stepSize;
-                item = IntrepidTwilight.TransientStride.(stepper)(f,dt);
+                item = IntrepidTwilight.TransientStride.(stepper)(problem);
             else
                 error('IntrepidTwilight:executive:build:unknownTimestepper',...
                     'The requested timestepper ''%s'' could not be found.',stepper);
@@ -20,6 +18,13 @@ function item = build(buildWhat,problem)
             
             
         case('residual')
+            item = IntrepidTwilight.executive.Residual(problem);
+            
+            
+        case('preconditioner')
+            item = IntrepidTwilight.executive.Preconditioner(problem);
+            
+            
             
         otherwise
     end

@@ -1,14 +1,15 @@
-function ie = implicitEuler(f,dt)
+function ie = implicitEuler(problem)
     
-    qStore = 0          ;
-    qLast  = 0          ;
+    qStore = 0                                      ;
+    qLast  = problem.initialState.q0                ;
+    f      = problem.semidiscretization.closure.rhs ;
     
-    ie.deltaq  = @(q) deltaq(q);
+    ie.deltaq  = @(q,dt) deltaq(q,dt);
     ie.qUpdate = @(qUpdate) updateQ(qUpdate) ;
     ie.qLast   = @() getQLast()  ;
     ie.qStore  = @() getQStore() ;
     
-    function dq = deltaq(q)
+    function dq = deltaq(q,dt)
         dq = dt*f(q);
     end
     function [] = updateQ(q)

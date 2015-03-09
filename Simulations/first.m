@@ -3,13 +3,6 @@ clc();
 
 problem = IntrepidTwilight.new('problem');
 
-%   Upfront problem choices
-problem.semidiscretization.name = 'Quasi2DUpwind' ;
-problem.timeStepper.name        = 'implicitEuler' ;
-problem.timeStepper.stepSize    = 0.2             ;
-problem.solver.name             = 'JFNK'          ;
-problem.solver.preconditioner   = 'BlockJacobi'   ;
-
 r2 = cos(pi/4);
 s2 = sqrt(2);
 
@@ -52,21 +45,31 @@ problem.miscellaneous.friction = 0.01;
 
 problem.miscellaneous.sRho  = 0;
 problem.miscellaneous.sRhov = 0;
-problem.miscellaneous.sRhoe = 10E6*[-1;0;0;1;0;0];
+problem.miscellaneous.sRhoe = 0*[-1;0;0;1;0;0];
 
 rho0 = 9.965569351080000e+02;
 e0   = 1.125536123942350e+05;
 v0   = 0.01;
-problem.initialState.rho0     = rho0*ones(problem.miscellaneous.nCV,1)     ;
-problem.initialState.rhoe0    = rho0*e0*ones(problem.miscellaneous.nCV,1)  ;
-problem.initialState.rhov0    = rho0*v0*ones(problem.miscellaneous.nMC,1)  ;
+rhoe0 = rho0 * e0;
+rhov0 = rho0 * v0;
+onesCV = ones(problem.miscellaneous.nCV,1) ;
+onesMC = ones(problem.miscellaneous.nMC,1) ;
+problem.initialState.rho0     = rho0*onesCV    ;
+problem.initialState.rhoe0    = rho0*e0*onesCV  ;
+problem.initialState.rhov0    = rho0*v0*onesMC  ;
 problem.initialState.rhov0(1) = 10*problem.initialState.rhov0(1)          ;
 
-problem.initialState.q0 = [problem.initialState.rho0;problem.initialState.rhoe0;problem.initialState.rhov0];
+problem.initialState.q0 = [...
+    problem.initialState.rho0/rho0   ;...
+    problem.initialState.rhoe0/rhoe0  ;...
+    problem.initialState.rhov0/rhov0  ];
+problem.dimensionalizer.rho  = rho0    ;
+problem.dimensionalizer.rhoe = rhoe0   ;
+problem.dimensionalizer.rhov = rhov0   ;
 
 problem.miscellaneous.iRho  = (1:problem.miscellaneous.nCV)';
 problem.miscellaneous.iRhoe = problem.miscellaneous.nCV+ problem.miscellaneous.iRho ;
-problem.miscellaneous.iRhov = (2*problem.miscellaneous.nCV + 1:problem.miscellaneous.nMC)';
+problem.miscellaneous.iRhov = 2*problem.miscellaneous.nCV + (1:problem.miscellaneous.nMC)';
 
 
 % Thermodynamic properites
@@ -76,9 +79,21 @@ problem.initialState.P = Pressure(problem.initialState.rho0,problem.initialState
 
 problem.miscellaneous.epsilon = 1E-4;
 
+
+
+%   Method choices
+problem.semidiscretization.name  = 'Quasi2DUpwind'   ;
+problem.timeStepper.name         = 'implicitEuler'   ;
+problem.timeStepper.stepSize     = 0.2               ;
+problem.solver.name              = 'JFNK'            ;
+problem.preconditioner.type      = 'none'            ;
+problem.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
+
+problem.constraint = @(q) (q < [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC]) & (q > [0*onesCV;-Inf*onesCV;-Inf*onesMC]) ;
+
 Simulation = IntrepidTwilight.new('simulation',problem);
 
-
+Simulation.run([0,2],0.01,0.1);
 %{
 s.epsilon = 5E-4;
 

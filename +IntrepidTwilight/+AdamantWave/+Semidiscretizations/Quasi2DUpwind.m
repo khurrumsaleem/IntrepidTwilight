@@ -10,15 +10,14 @@ function q2Dup = Quasi2DUpwind(problem)
     %                            Parameter unpacking                          %
     % ======================================================================= %
     
-    
-    
-    nCV = problem.miscellaneous.nCV;
-    nMC = problem.miscellaneous.nMC;
-    
     % Conserved quantities
     rho  = problem.initialState.rho0   ;
     rhoe = problem.initialState.rhoe0  ;
     rhov = problem.initialState.rhov0  ;
+    
+    rhoDim  = problem.dimensionalizer.rho    ;
+    rhoeDim = problem.dimensionalizer.rhoe   ;
+    rhovDim = problem.dimensionalizer.rhov   ;
     
     % Indices
     iRho  = problem.miscellaneous.iRho  ;
@@ -103,22 +102,22 @@ function q2Dup = Quasi2DUpwind(problem)
     function f = rhs(q)
         
         % Pull conserved values
-        rho  = q(iRho)	;
-        rhoe = q(iRhoe) ;
-        rhov = q(iRhov) ;
-        
-        
+        rho  = q(iRho)  * rhoDim    ;
+        rhoe = q(iRhoe) * rhoeDim   ;
+        rhov = q(iRhov) * rhovDim   ;
+
+
         updateClosureEnvironment();
         
         
-        f = [massRHS();energyRHS();momentumRHS()];
+        f = [massRHS()/rhoDim;energyRHS()/rhoeDim;momentumRHS()/rhovDim];
         
     end
     
     
-    function [] = updateClosureEnvironment(rho,rhoe,rhov)
-        updateVelocity(rho,rhoe,rhov);
-        updateThermodynamicState(rho,rhoe,rhov);
+    function [] = updateClosureEnvironment()
+        updateVelocity();
+        updateThermodynamicState();
     end
     
     function [] = updateVelocity()
@@ -205,9 +204,9 @@ function q2Dup = Quasi2DUpwind(problem)
     function dfdqBD = blockDiagonalJacobian(q)
         
         %   Pull state values
-        rhoRef  = q(iRho)  ;
-        rhoeRef = q(iRhoe) ;
-        rhovRef = q(iRhov) ;
+        rhoRef  = q(iRho)  * rhoDim     ;
+        rhoeRef = q(iRhoe) * rhoeDim    ;
+        rhovRef = q(iRhov) * rhovDim    ;
         
         %   Build large perturbed arrays for fast Thermodynamic update
         rhoTD  = [ plusEps*rhoRef  ; minusEps*rhoRef  ];
@@ -273,7 +272,7 @@ function q2Dup = Quasi2DUpwind(problem)
             massMinus = massRHS();
             
             %   Calculate
-            dfdqBD(K,k) = (massPlus - massMinus)/(2*epsilon);
+            dfdqBD(K,k) = (massPlus - massMinus)/(2*epsilon*rhoDim);
 
         end
         %   Reset rho
@@ -312,7 +311,7 @@ function q2Dup = Quasi2DUpwind(problem)
             energyMinus = energyRHS();
             
             %   Calculate
-            dfdqBD(nCV+K,k) = (energyPlus - energyMinus)/(2*epsilon);
+            dfdqBD(nCV+K,k) = (energyPlus - energyMinus)/(2*epsilon*rhoeDim);
 
 
         end
@@ -350,15 +349,15 @@ function q2Dup = Quasi2DUpwind(problem)
             
             
             %   Calculate
-            dfdqBD(2*nCV+K,k) = (momentumPlus - momentumMinus)/(2*epsilon);
+            dfdqBD(2*nCV+K,k) = (momentumPlus - momentumMinus)/(2*epsilon*rhovDim);
 
         end
         
         
         % Reset all mutations to closue enviroment
-        rho  = rhoRef   ;
-        rhoe = rhoeRef  ;
-        rhov = rhovRef  ;
+        rho  = rhoRef  / rhoDim     ;
+        rhoe = rhoeRef / rhoeDim    ;
+        rhov = rhovRef / rhovDim    ;
         TD   = TDref    ;
         
     end

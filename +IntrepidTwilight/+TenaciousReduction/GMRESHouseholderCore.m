@@ -40,10 +40,8 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
     
     % Vector allocation
     Zeros(N-1,1) = 0            ;
-    e            = [1 ; Zeros]  ; % Unit vector used in creation of Householder vectors
     alpha        = b*0          ; % Vector of projected residuals
     Residuals    = [0 ; Zeros]  ; % All residuals from ASGMRES
-    Q            = Residuals    ;
     
     % Initial residuals
     r0      = PreConditionerLeft(b - A*PreConditionerRight(x0));
@@ -86,12 +84,12 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
         R(:,1) = R(:,1) - 2 * H(:,1) * (H(:,1)'*R(:,1));
         
         % Get the first column of the unitary matrix
-        Q = e - 2 * H(:,1) * (H(:,1)'*e);
+        q = e - 2 * H(:,1) * (H(:,1)'*e);
         e = e(1:N-1);
         
         % Residual update
-        alpha(1) = Q'*rk           ; % Projected residual
-        rk       = rk - alpha(1)*Q; % True b - A*(x+dx) residual
+        alpha(1) = q'*rk            ; % Projected residual
+        rk       = rk - alpha(1)*q  ; % True b - A*(x+dx) residual
         
         % Starting and current residual norms used for choice of next basis vector
         rkm1Norm = rkNorm       ;
@@ -110,7 +108,7 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
             if rkNorm <= nu*rkm1Norm
                 Z(:,k) = rk/rkNorm;
             else
-                Z(:,k) = Q;
+                Z(:,k) = q;
             end
 
             
@@ -135,15 +133,15 @@ function [x,Residuals] = GMRESHouseholderCore(A,b,x0,Nrestarts,Nmax,Tolerance,nu
             end
             
             % Get the k-th column of the current unitary matrix
-            Q = [Zeros(1:k-1) ; e - 2*h*(h'*e)];
+            q = [Zeros(1:k-1) ; e - 2*h*(h'*e)];
             for m = k-1:-1:1
-                Q = Q - 2*H(:,m)*(H(:,m)'*Q);
+                q = q - 2*H(:,m)*(H(:,m)'*q);
             end
             e = e(1:end-1);
             
             % Update residual
-            alpha(k) = Q'*rk               ;
-            rk       = rk - alpha(k)*Q     ;
+            alpha(k) = q'*rk               ;
+            rk       = rk - alpha(k)*q     ;
             
             % Reassign previous residuals
             rkm1Norm = rkNorm;
