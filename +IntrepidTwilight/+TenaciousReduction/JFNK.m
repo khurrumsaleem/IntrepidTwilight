@@ -68,7 +68,7 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
 
 
         %   Relax the step size for a physical solution
-        while notConstrained(xNL + dx)
+        while notConstrained(xNL + dx) && (max(abs(dx)) > 1E-12)
             dx = relaxor * dx;
         end
 
@@ -81,7 +81,7 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
             dx         = relaxor * dx;
             rNLnew     = r(xNL + dx);
             rNormNLnew = norm(rNLnew,2);
-            notDone    = (rNormNLnew > rNormNL) && (max(abs(dx)) > 1E-10);
+            notDone    = (rNormNLnew > rNormNL) && max(abs(dx)) > 1E-12;
         end
         xNL  = xNL + dx ;   % Calculate relaxed x value
 
@@ -95,8 +95,8 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
         %  preconditioner.update(xNL);
 
         % Loop break check
-        if (n > 4)
-            stagnantResidual = abs(mean(residualVector(n-4:n)) - rNormNL)/rNormNL < 1E-3;
+        if (n > 15)
+            stagnantResidual = abs(mean(residualVector(n-10:n)) - rNormNL)/rNormNL < 0.30;
         end
         
         

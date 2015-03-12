@@ -1,8 +1,9 @@
 function q2Dup = Quasi2DUpwind(problem)
     
     % Return closure
-    q2Dup.rhs                   = @(q) rhs(q);
-    q2Dup.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q);
+    q2Dup.rhs                   = @(q) rhs(q)                   ;
+    q2Dup.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
+    q2Dup.updateTime            = @(time) updateTime(time)      ;
     
     
     
@@ -88,6 +89,7 @@ function q2Dup = Quasi2DUpwind(problem)
     % Initialization for inclusion into the closure environment
     rhoBar = 0;
     v      = 0;
+    t      = 0;
 
 
     %   Create a Thermodynamic struct TD (used for passing 
@@ -114,6 +116,10 @@ function q2Dup = Quasi2DUpwind(problem)
         
     end
     
+    
+    function [] = updateTime(time)
+        t = time;
+    end
     
     function [] = updateClosureEnvironment()
         updateVelocity();
@@ -150,7 +156,7 @@ function q2Dup = Quasi2DUpwind(problem)
         vzRho = v.*(  (v>0).*rho(from) + (v<=0).*rho(to)  );
         
         % Total RHS
-        f = Ccv*(vzRho) + sRho ;
+        f = Ccv*(vzRho) + sRho(rho,rhoe,rhov,TD,t) ;
         
     end
 
@@ -168,7 +174,7 @@ function q2Dup = Quasi2DUpwind(problem)
         vzRhoh = v.*(  (v>0).*TD.rhoh(from)  + (v<=0).*TD.rhoh(to)  );
         
         % Total RHS
-        f  = Ccv*vzRhoh + sRhoe ;
+        f  = Ccv*vzRhoh + sRhoe(rho,rhoe,rhov,TD,t) ;
         
     end
     
@@ -195,7 +201,7 @@ function q2Dup = Quasi2DUpwind(problem)
         fric   = -friction*LoD.*abs(rhov).*v ;
         
         % Total RHS
-        f = advect + buoy + fric + sRhov ;
+        f = advect + buoy + fric + sRhov(rho,rhoe,rhov,TD,t) ;
         
     end
     

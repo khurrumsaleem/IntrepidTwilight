@@ -34,9 +34,12 @@ problem.miscellaneous.nEq      = 2*problem.miscellaneous.nCV + problem.miscellan
 
 problem.miscellaneous.friction = 0.01;
 
-problem.miscellaneous.sRho  = 0;
-problem.miscellaneous.sRhov = 0;
-problem.miscellaneous.sRhoe = 0;
+problem.miscellaneous.sRho  = @(rho,rhoe,rhov,TD,t) 0;
+problem.miscellaneous.sRhov = @(rho,rhoe,rhov,TD,t) 0;
+
+energySource = (1:12)'*0;
+energySource(8) = +5E7;
+problem.miscellaneous.sRhoe = @(rho,rhoe,rhov,TD,t) ((t > 1)&&(t<=60))*(energySource*(t-1)/(60-1)) + (t>60)*energySource;
 
 rho0 = 9.965569351080000e+02;
 e0   = 1.125536123942350e+05;
@@ -84,6 +87,6 @@ problem.constraint = @(q) (q < [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC]) & (q >
 
 simulation = IntrepidTwilight.new('simulation',problem);
 
-simulation.run([0,2],0.1,0.1);
+simulation.run([0,10],1,1);
 
 
