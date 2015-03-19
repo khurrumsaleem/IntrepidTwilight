@@ -17,7 +17,7 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
     end
     
     % Tolerances
-    LinearTolerance    = 1E-10;
+    LinearTolerance    = 1E-13;
     NonlinearTolerance = 1E-6 ;
 
     % Matrix allocation
@@ -38,21 +38,27 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
     % ================================================================= %
     %                            JFNK Iteration                         %
     % ================================================================= %
+    
+    % Let x = x0
+    xNL     = x0;
+    
+    %   Relax the step size for a physical solution
+    relaxor = 0.999;
+    while notConstrained(xNL)
+        xNL = relaxor * xNL;
+    end
+
 
     % Initial r0
-    r0      = -r(x0)      ;
-    rNormNL = norm(r0,2)  ;
-    
-    % Backtrack relaxor
-    relaxor = 0.5;
+    rNL     = -r(xNL)     ;
+    rNormNL = norm(rNL,2)  ;
     
     % Determine if the loop is needed
     NotDone          = rNormNL > NonlinearTolerance ;
     stagnantResidual = false()                      ;
+
+    relaxor = 0.5;
     
-    % Let x = x0
-    xNL     = x0;
-    rNL     = r0;
     
     %   Initialize preconditioner
     preconditioner.update(xNL);
@@ -92,12 +98,7 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
         residualVector(n) = rNormNL     ;
         
         %   Allow preconditioner to do some post-update work
-        %  preconditioner.update(xNL);
-
-        % Loop break check
-        if (n > 15)
-            stagnantResidual = abs(mean(residualVector(n-10:n)) - rNormNL)/rNormNL < 0.30;
-        end
+        preconditioner.update(xNL);
         
         
         NotDone = (rNormNL > NonlinearTolerance) && not(stagnantResidual) ;

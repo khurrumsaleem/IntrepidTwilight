@@ -7,7 +7,7 @@ function p = Problem()
     p.timeStepper.stepSize  = [];
     p.semidiscretization    = '';
     p.solver.name           = '';
-    p.preconditioner        = '';
-    p.constraint            = '';
+    p.solver.preconditioner = '';
+    p.solver.guard          = '';
     
 end

@@ -88,7 +88,8 @@ function q2Dup = Quasi2DUpwind(problem)
 
     % Initialization for inclusion into the closure environment
     rhoBar = 0;
-    v      = 0;
+    vCV    = 0;
+    vMC    = 0;
     t      = 0;
 
 
@@ -128,8 +129,16 @@ function q2Dup = Quasi2DUpwind(problem)
     
     function [] = updateVelocity()
         % Get average density and CV surface velocities
-        rhoBar = volumeBack.*rho(from) + volumeFront.*rho(to);
-        v     = rhov ./ rhoBar ;
+        rhoBar    = volumeBack.*rho(from) + volumeFront.*rho(to);
+        
+        %   Control volume advection
+        vCV       = rhov ./ rhoBar;
+        
+        %   Momentum cell advection
+        denom     = 1./(rhoBar(up)+rhoBar(down))                ;
+        alphaUp   = rhoBar(up).*rhov(up).*denom                 ;
+        alphaDown = rhoBar(up).*rhov(up).*denom                 ;
+        vMC       = alphaUp .* upDotN + alphaDown .* downDotN   ;
     end
     
     function [] = updateThermodynamicState()
@@ -153,7 +162,7 @@ function q2Dup = Quasi2DUpwind(problem)
     function f = massRHS()
         
         % Advection term
-        vzRho = v.*(  (v>0).*rho(from) + (v<=0).*rho(to)  );
+        vzRho = vCV.*(  (vCV>0).*rho(from) + (vCV<=0).*rho(to)  );
         
         % Total RHS
         f = Ccv*(vzRho) + sRho(rho,rhoe,rhov,TD,t) ;
@@ -171,7 +180,7 @@ function q2Dup = Quasi2DUpwind(problem)
     function f = energyRHS()
         
         % Advection term
-        vzRhoh = v.*(  (v>0).*TD.rhoh(from)  + (v<=0).*TD.rhoh(to)  );
+        vzRhoh = vCV.*(  (vCV>0).*TD.rhoh(from)  + (vCV<=0).*TD.rhoh(to)  );
         
         % Total RHS
         f  = Ccv*vzRhoh + sRhoe(rho,rhoe,rhov,TD,t) ;
@@ -188,17 +197,15 @@ function q2Dup = Quasi2DUpwind(problem)
     function f = momentumRHS()
         
         
-        vavg   = (v(up).*upDotN + v(down).*downDotN)/2;
-        
         % Upwind/downwind momentum advection
-        fup   = rhov(up)  .*(v(up)  .*upDotN)   ;
-        fdown = rhov(down).*(v(down).*downDotN) ;
-        fmom  = sign(vavg).*(fdown - fup)       ;
+        fup   = rhov(up)            ;
+        fdown = rhov(down)          ;
+        fmom  = vMC.*(fdown - fup)  ;
         
         % Pieces
         advect = (Cmc*(fmom.*Ainter) + Cinter*(TD.P(iInter).*Ainter));
-        buoy   = -g.*rhoBar                   ;
-        fric   = -friction*LoD.*abs(rhov).*v ;
+        buoy   = -g.*rhoBar                     ;
+        fric   = -friction*LoD.*abs(rhov).*vCV  ;
         
         % Total RHS
         f = advect + buoy + fric + sRhov(rho,rhoe,rhov,TD,t) ;

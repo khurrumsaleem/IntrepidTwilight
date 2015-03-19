@@ -15,7 +15,7 @@ function sim = Simulation(problem)
     
     
     %   Build preconditioner
-    sim.pc = IntrepidTwilight.executive.build('preconditioner',problem);
+    sim.solver = IntrepidTwilight.executive.build('solver',problem);
     
     
     %   Add the finalized problem and other fields
@@ -74,7 +74,7 @@ function sim = Simulation(problem)
             t = t + step;
             sim.f.updateTime(t);
             [q,stats] = IntrepidTwilight.TenaciousReduction.JFNK(1.0001*q,sim.r(step),...
-                1E-8,problem.constraint,pc);
+                sim.solver);
                 
             if saveData
                 qSave(:,k) = q;

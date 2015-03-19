@@ -21,8 +21,8 @@ function item = build(buildWhat,problem)
             item = IntrepidTwilight.executive.Residual(problem);
             
             
-        case('preconditioner')
-            item = IntrepidTwilight.executive.Preconditioner(problem);
+        case('solver')
+            item = IntrepidTwilight.executive.Solver(problem);
             
             
             

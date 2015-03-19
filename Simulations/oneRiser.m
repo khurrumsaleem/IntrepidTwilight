@@ -39,7 +39,7 @@ problem.miscellaneous.sRhov = @(rho,rhoe,rhov,TD,t) 0;
 
 energySource = (1:12)'*0;
 energySource(8) = +5E7;
-problem.miscellaneous.sRhoe = @(rho,rhoe,rhov,TD,t) ((t > 1)&&(t<=60))*(energySource*(t-1)/(60-1)) + (t>60)*energySource;
+problem.miscellaneous.sRhoe = @(rho,rhoe,rhov,TD,t) ((t > 0.01)&&(t<=0.02))*(energySource*(t-0.01)/(0.02-0.01)) + (t>0.02)*energySource;
 
 rho0 = 9.965569351080000e+02;
 e0   = 1.125536123942350e+05;
@@ -76,17 +76,17 @@ problem.miscellaneous.epsilon = 1E-4;
 
 
 %   Method choices
-problem.semidiscretization.name  = 'Quasi2DUpwind'   ;
-problem.timeStepper.name         = 'implicitEuler'   ;
-problem.timeStepper.stepSize     = 0.2               ;
-problem.solver.name              = 'JFNK'            ;
-problem.preconditioner.type      = 'none'            ;
-problem.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
+problem.semidiscretization.name         = 'Quasi2DUpwind'   ;
+problem.timeStepper.name                = 'implicitEuler'   ;
+problem.timeStepper.stepSize            = 0.2               ;
+problem.solver.name                     = 'JFNK'            ;
+problem.solver.preconditioner.type      = 'none'            ;
+problem.solver.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
 
 problem.constraint = @(q) (q < [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC]) & (q > [0*onesCV;-Inf*onesCV;-Inf*onesMC]) ;
 
 simulation = IntrepidTwilight.new('simulation',problem);
 
-simulation.run([0,10],1,1);
+simulation.run([0,1],0.05,0.05);
 
 
