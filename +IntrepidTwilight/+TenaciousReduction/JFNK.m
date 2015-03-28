@@ -1,116 +1,177 @@
-function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
-
+function [xNL,varargout] = JFNK(x0,r,parameters)
+    
     
     % ================================================================= %
     %                               Set-Up                              %
     % ================================================================= %
     
-    % Length
-    N    = length(x0)   ;
-    Nmax = N            ;
+    %   Parameter defintion/unpacking
+    n               = length(x0)                     ;
+    iterMax         = parameters.iterationMaximum    ;
+    rNLTolerance    = parameters.tolerance.residual  ;
+    dxTolerance     = parameters.tolerance.step      ;
+    nMax            = parameters.gmres.restart       ;
+    nu              = parameters.gmres.nu            ;
+    linearTolerance = parameters.gmres.tolerance     ;
+    epsilon         = parameters.gmres.epsilon       ;
+    gammaUnder      = parameters.newton.relax.under  ;
+    gammaOver       = parameters.newton.relax.over   ;
+    preconditioner  = parameters.preconditioner      ;
+    guard           = parameters.guard               ;
     
-    % Constraint check
-    if (nargin < 4) || not(isa(constraint,'function_handle'))
-        notConstrained = @(x) false();
-    else
-        notConstrained = @(x) any(not(constraint(x)));
+    if (nMax == -1)
+        nMax = n;
     end
     
-    % Tolerances
-    LinearTolerance    = 1E-13;
-    NonlinearTolerance = 1E-6 ;
-
+    
     % Matrix allocation
-    Z(N,Nmax) = 0   ;   % Update's basis vectors
-    H(N,Nmax) = 0   ;   % Householder vectors for projections
-    R(N,Nmax) = 0   ;   % Upper-triangular matrix for least squares problem
+    Z(n,nMax) = 0   ;   % Update's basis vectors
+    H(n,nMax) = 0   ;   % Householder vectors for projections
+    R(n,nMax) = 0   ;   % Upper-triangular matrix for least squares problem
     
     % Unit vector used for projections
-    Zeros(N-1,1) = 0        ;
+    Zeros(n-1,1) = 0        ;
     alpha        = [0;Zeros];   % Vector of projected residuals
-
-    % Threshold parameter used to determine which basis to use in the GMRES iterations
-    nu = 0.15;
-
-
-
-
+    
     % ================================================================= %
     %                            JFNK Iteration                         %
     % ================================================================= %
     
     % Let x = x0
-    xNL     = x0;
+    xNL = x0;
     
-    %   Relax the step size for a physical solution
-    relaxor = 0.999;
-    while notConstrained(xNL)
-        xNL = relaxor * xNL;
-    end
-
-
+    %   Let the gaurd make sure xNL is to its liking
+    xNL = guard.value(xNL);
+    
     % Initial r0
-    rNL     = -r(xNL)     ;
-    rNormNL = norm(rNL,2)  ;
-    
-    % Determine if the loop is needed
-    NotDone          = rNormNL > NonlinearTolerance ;
-    stagnantResidual = false()                      ;
-
-    relaxor = 0.5;
-    
+    rNL     = r(xNL)        ;
+    rNLnorm = norm(rNL,2)   ;
     
     %   Initialize preconditioner
     preconditioner.update(xNL);
     
     % Counter and residual
-    n                     = 1;
-    residualVector(100,1) = 0;
+    rNormVec(iterMax,1) = 0         ;
+    rNormVec(1)         = rNLnorm   ;
+    iter                = 2         ;
     
-    while NotDone
+    
+    
+    % =========================================================================== %
+    %                            Non-linear iterations                            %
+    % =========================================================================== %
+    
+    %   First iteration
+    [dxNorm,xNL,rNL,rNLnorm] = newtonUpdate(xNL,rNL,rNLnorm);
+    preconditioner.update(xNL);
+    rNormVec(iter) = rNLnorm    ;
+    iter           = iter + 1   ;
+    normNotDone    = rNLnorm > rNLTolerance;
+    stepNotDone    = dxNorm  > dxTolerance ;
+    notConverged   = (normNotDone || stepNotDone) && (iter <= iterMax);
+    xNLm1          = xNL;
+    
+    
+    %     beta = 2;
+    
+    while notConverged
+        %   Get the Newton update with back-tracking
+        [dxNorm,xNL,rNL,rNLnorm] = newtonUpdate(xNL,rNL,rNLnorm);
         
-        % Solve linear system
-        dx = GMRES(xNL,rNL,rNormNL);   % Solve the linear system to LinearTolerance
-
-
-        %   Relax the step size for a physical solution
-        while notConstrained(xNL + dx) && (max(abs(dx)) > 1E-12)
-            dx = relaxor * dx;
+        
+        %   Extrapolate solution
+        dxExtrap    = rNL .* (xNL - xNLm1)./(rNL - rNormVec(iter-1));
+        xExtrap     = xNL - dxExtrap    ;
+        rExtrap     = r(xExtrap)        ;
+        rExtrapNorm = norm(rExtrap,2)   ;
+        if rExtrapNorm < 0.9*rNLnorm
+            xNL     = xExtrap       ;
+            rNL     = rExtrap       ;
+            rNLnorm = rExtrapNorm   ;
         end
-
-
-        % Backtracker
-        rNLnew     = r(xNL + dx)            ;
-        rNormNLnew = norm(rNLnew,2)         ;
-        notDone    = rNormNLnew > rNormNL   ;
-        while notDone
-            dx         = relaxor * dx;
-            rNLnew     = r(xNL + dx);
-            rNormNLnew = norm(rNLnew,2);
-            notDone    = (rNormNLnew > rNormNL) && max(abs(dx)) > 1E-12;
-        end
-        xNL  = xNL + dx ;   % Calculate relaxed x value
-
         
-        % Check non-linear residual
-        rNL               = -rNLnew     ;
-        rNormNL           = rNormNLnew  ;
-        residualVector(n) = rNormNL     ;
-        
-        %   Allow preconditioner to do some post-update work
+        %   Allow preconditioner to do some post-newton updating
         preconditioner.update(xNL);
         
+        Show(rNLnorm);
         
-        NotDone = (rNormNL > NonlinearTolerance) && not(stagnantResidual) ;
-        n       = n + 1             ;
-        fprintf('\t\t\t%5.2E\t%5.2E\n',rNormNL,norm(dx,2));
+        %   Iteration clean-up
+        xNLm1          = xNL        ;
+        rNormVec(iter) = rNLnorm    ;
+        iter           = iter + 1   ;
+        normNotDone    = rNLnorm > rNLTolerance;
+        stepNotDone    = dxNorm  > dxTolerance ;
+        notConverged   = (normNotDone || stepNotDone) && (iter <= iterMax);
     end
     
+    
     if (nargout > 1)
-        stats.iterations = n - 1 ;
-        stats.norm       = rNormNL      ;
-        varargout{1}     = stats        ;
+        stats.iterations = iter - 1                     ;
+        stats.norm       = rNormVec(1:stats.iterations) ;
+        varargout{1}     = stats                        ;
     end
+    
+    
+    
+    function [dxNorm,xNew,rNew,rNewNorm] = newtonUpdate(xOld,rOld,rNormOld)
+        
+        % Solve linear system to within linearTolerance
+        dx = GMRES(xOld,rOld,rNormOld);
+        
+        %   Relax the step size to the gaurded value
+        dx = guard.step(xOld,dx);
+        
+        
+        
+        % =============================================== %
+        %                       Relaxation                %
+        % =============================================== %
+        
+        %   Set-up
+        rNew       = r(xOld - dx)         ;
+        rNewNorm   = norm(rNew,2)         ;
+        notReduced = rNewNorm > rNormOld  ;
+        
+        if notReduced   % Under-relaxation
+            
+            while notReduced
+                dx         = gammaUnder*dx          ;
+                rNew       = r(xOld - dx)           ;
+                rNewNorm   = norm(rNew,2)           ;
+                notReduced = rNewNorm > rNormOld    ;
+            end
+            
+        else % Over-relaxation
+
+            reduced    = not(notReduced);
+            rTrack     = rNew           ;
+            rNormTrack = rNewNorm       ;
+            while reduced
+                dx         = gammaOver * dx                     ;
+                rNew       = r(xOld - dx)                       ;
+                rNewNorm   = norm(rNew,2)                       ;
+                reduced    = rNewNorm < 0.9*rNormTrack          ;
+                rTrack     = rNew*reduced + rTrack*(1-reduced)  ;
+                rNormTrack = norm(rTrack,2)                     ;
+            end
+            rNew     = rTrack       ;
+            rNewNorm = rNormTrack   ;
+            dx       = dx/gammaOver ;
+
+        end
+
+        % Calculate relaxed x value
+        xNew   = xOld - dx      ;
+        dxNorm = norm(dx,Inf)   ;
+
+    end
+    
+    
+    
+    
+    
+    
+    
     
     
     % ================================================================= %
@@ -123,7 +184,7 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
         % First Step (k = 1)
         % Compute J*z1 and store in R
         w      = preconditioner.apply(Z(:,1));
-        R(:,1) = (r(xk + epsilon*w) + rk0) / epsilon;
+        R(:,1) = (r(xk + epsilon*w) - rk0) / epsilon;
         
         % Compute Householder vector to bring R(:,1) into upper triangular form
         e      = [1 ; Zeros]                        ;
@@ -136,10 +197,10 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
         
         % Get the first column of the unitary matrix
         q = e - 2 * H(:,1) * (H(:,1)'*e);
-        e = e(1:N-1);
+        e = e(1:n-1);
         
         % Residual update
-        alpha(1) = q'*rk0           ;
+        alpha(1) = q'*rk0          ;
         rk       = rk0 - alpha(1)*q ;
         
         % Assign residual norms to determine which basis to use
@@ -147,18 +208,18 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
         rkNorm   = norm(rk,2)   ;
         
         
-        for k = 2:Nmax
+        for k = 2:nMax
             
             % Choose the next basis vector
             if rkNorm <= nu*rkm1Norm
-                Z(:,k) = rk/rkNorm  ;   %   GCR (RB-SGMRES) basis
+                Z(:,k) = rk/rkNorm ;   %   GCR (RB-SGMRES) basis
             else
                 Z(:,k) = q          ;   %   Simpler GMRES basis
             end
             
             % Compute and store A*zk in R
             w      = preconditioner.apply(Z(:,k));
-            R(:,k) = (r(xk + epsilon*w) + rk0) / epsilon;
+            R(:,k) = (r(xk + epsilon*w) - rk0) / epsilon;
             
             % Apply all previous projections to new the column
             for m = 1:k-1
@@ -166,10 +227,10 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
             end
             
             % Get the next Householder vector
-            h        = R(k:N,k)                     ;
+            h        = R(k:n,k)                     ;
             h        = -Signum(h(1))*norm(h,2)*e - h;
             h        = h ./ norm(h,2)               ;
-            H(k:N,k) = h                            ;
+            H(k:n,k) = h                            ;
             
             %   Apply projection to R to bring it into upper triangular form;
             for m = 1:k
@@ -184,7 +245,7 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
             e = e(1:end-1);
             
             % Update residual
-            alpha(k) = q'*rk            ;
+            alpha(k) = q'*rk           ;
             rk       = rk - alpha(k)*q  ;
             
             % Update residual norms
@@ -192,14 +253,23 @@ function [xNL,varargout] = JFNK(x0,r,epsilon,constraint,preconditioner)
             rkNorm   = norm(rk,2);
             
             % Solve least-squares problem
-            if rkNorm/norm(xNL,2) < LinearTolerance
+            if rkNorm < linearTolerance
                 break;
             end
             
         end
         
         % Update to x
-        yk = triu(R(1:k,1:k)) \ alpha(1:k)  ;   % Solve the least-squares problem
+        Rtilde = triu(R(1:k,1:k));
+        
+        if rcond(Rtilde) > 10*eps()
+            yk = Rtilde \ alpha(1:k);   % Solve the least-squares problem
+        else
+            S  = diag(1./diag(Rtilde));
+            yk = (Rtilde*S) \ alpha(1:k);
+            yk = S*yk;
+        end
+        
         dx = Z(:,1:k) * yk                  ;   % Calculate full Newton update
         dx = preconditioner.apply(dx)       ;
     end

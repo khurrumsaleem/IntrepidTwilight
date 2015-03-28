@@ -1,12 +1,12 @@
 function pc = Preconditioner(problem)
     
     
-    switch(lower(problem.preconditioner.type))
+    switch(lower(problem.solver.preconditioner.type))
 
         case('block-jacobi')
             
             
-            blockSize = problem.preconditioner.blockSize;
+            blockSize = problem.solver.preconditioner.blockSize;
             nColumns  = max(blockSize)                  ;
             nBlocks   = numel(blockSize)                ;
 
@@ -36,7 +36,8 @@ function pc = Preconditioner(problem)
             pc = @(dt) struct('apply',@(q) applyBlockJacobi(q),'update',@(q) updateBlockJacobi(q,dt));
             
         case('none')
-            pc = @(dt) struct('apply',@(q) q,'update',@(q) []);
+            pc.apply  = @(q) q  ; 
+            pc.update = @(q) [] ;
             
     end
     

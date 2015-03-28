@@ -83,7 +83,10 @@ problem.solver.name                     = 'JFNK'            ;
 problem.solver.preconditioner.type      = 'none'            ;
 problem.solver.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
 
-problem.constraint = @(q) (q < [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC]) & (q > [0*onesCV;-Inf*onesCV;-Inf*onesMC]) ;
+qHi = [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC];
+qLo = [1E-5*onesCV;-Inf*onesCV;-Inf*onesMC];
+problem.solver.guard.value = @(q) guardValue(q,qLo,qHi);
+problem.solver.guard.step  = @(q,dq) guardStep(q,dq,qLo,qHi);
 
 simulation = IntrepidTwilight.new('simulation',problem);
 

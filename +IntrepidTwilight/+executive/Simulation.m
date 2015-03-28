@@ -47,8 +47,8 @@ function sim = Simulation(problem)
         q          = qSave(:,1)                             ;
         
         %   Initialize preconditioner
-        pc = sim.pc(dt);
-        pc.update(qSave(:,1));
+%         pc = sim.pc(dt);
+%         pc.update(qSave(:,1));
         sim.f.updateTime(tStart);
         
         %   Save index
@@ -69,8 +69,8 @@ function sim = Simulation(problem)
 
             
             %   Calculate next time value
-            pc = sim.pc(step);
-            pc.update(q);
+%             pc = sim.pc(step);
+%             pc.update(q);
             t = t + step;
             sim.f.updateTime(t);
             [q,stats] = IntrepidTwilight.TenaciousReduction.JFNK(1.0001*q,sim.r(step),...
@@ -82,7 +82,7 @@ function sim = Simulation(problem)
             end
 
             sim.ts.qUpdate(q);
-            fprintf('%5.2E seconds: %3G iterations, %5.2E residual\n',t,stats.iterations,stats.norm);
+            fprintf('%5.2E seconds: %3G iterations, %5.2E residual\n',t,stats.iterations,stats.norm(end));
             
         end
         
