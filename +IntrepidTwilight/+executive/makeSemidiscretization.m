@@ -1,6 +1,6 @@
-function semid = makeSemidiscretization(problem)
+function semid = makeSemidiscretization(model)
 
-    semidName = problem.semidiscretization.name;
+    semidName = model.semidiscretization.name;
     modules   = IntrepidTwilight.executive.moduleRegistry('physics');
     
     for k = 1:length(modules)
@@ -14,6 +14,6 @@ function semid = makeSemidiscretization(problem)
         end
     end
     
-    semid = IntrepidTwilight.(module).Semidiscretizations.(semidName)(problem);
+    semid = IntrepidTwilight.(module).Semidiscretizations.(semidName)(model);
 
 end

@@ -14,8 +14,9 @@ function sim = Simulation(problem)
     sim.r = IntrepidTwilight.executive.build('residual',problem);
     
     
-    %   Build preconditioner
-    sim.solver = IntrepidTwilight.executive.build('solver',problem);
+    %   Build solver and preconditioner
+    sim.solver = IntrepidTwilight.executive.build('solver',problem) ;
+    sim.pc     = sim.solver.preconditioner                          ;
     
     
     %   Add the finalized problem and other fields
@@ -47,8 +48,8 @@ function sim = Simulation(problem)
         q          = qSave(:,1)                             ;
         
         %   Initialize preconditioner
-%         pc = sim.pc(dt);
-%         pc.update(qSave(:,1));
+        sim.solver.preconditioner = sim.pc(dt);
+        sim.solver.preconditioner.update(qSave(:,1));
         sim.f.updateTime(tStart);
         
         %   Save index
@@ -69,13 +70,21 @@ function sim = Simulation(problem)
 
             
             %   Calculate next time value
-%             pc = sim.pc(step);
-%             pc.update(q);
+            sim.solver.preconditioner = sim.pc(step);
+            sim.solver.preconditioner.update(q);
+
+            %   Show condition number
+            Show(...
+                IntrepidTwilight.ConvenientMeans.conditionNumberMaximum(...
+                    sim.solver.preconditioner.get(),1));
+
             t = t + step;
             sim.f.updateTime(t);
-            [q,stats] = IntrepidTwilight.TenaciousReduction.JFNK(1.0001*q,sim.r(step),...
-                sim.solver);
-                
+            [q,stats] = IntrepidTwilight.TenaciousReduction.JFNK(...
+                q+1E-5*sim.f.rhs(q)  ,  sim.r(step)  ,  sim.solver);
+%             sim.ts.qUpdate(q);
+
+            
             if saveData
                 qSave(:,k) = q;
                 k          = k + 1;
@@ -83,6 +92,11 @@ function sim = Simulation(problem)
 
             sim.ts.qUpdate(q);
             fprintf('%5.2E seconds: %3G iterations, %5.2E residual\n',t,stats.iterations,stats.norm(end));
+            
+            if abs(t - 7.0E-1) < 10*eps()
+                g = [];
+            end
+            
             
         end
         

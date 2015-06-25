@@ -47,8 +47,8 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
     rNL     = r(xNL)        ;
     rNLnorm = norm(rNL,2)   ;
     
-    %   Initialize preconditioner
     preconditioner.update(xNL);
+    
     
     % Counter and residual
     rNormVec(iterMax,1) = 0         ;
@@ -72,9 +72,12 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
     xNLm1          = xNL;
     
     
-    %     beta = 2;
+    if any(isnan(xNL + rNL))
+        g = [];
+    end
     
     while notConverged
+        
         %   Get the Newton update with back-tracking
         [dxNorm,xNL,rNL,rNLnorm] = newtonUpdate(xNL,rNL,rNLnorm);
         
@@ -89,10 +92,8 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
             rNL     = rExtrap       ;
             rNLnorm = rExtrapNorm   ;
         end
-        
-        %   Allow preconditioner to do some post-newton updating
+
         preconditioner.update(xNL);
-        
         Show(rNLnorm);
         
         %   Iteration clean-up
@@ -113,10 +114,15 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
     
     
     
-    function [dxNorm,xNew,rNew,rNewNorm] = newtonUpdate(xOld,rOld,rNormOld)
+    function [dxNorm,xNew,rNew,rNewNorm] = newtonUpdate(xOld,rOld,rOldNorm)
         
         % Solve linear system to within linearTolerance
-        dx = GMRES(xOld,rOld,rNormOld);
+        dx = GMRES(xOld,rOld,rOldNorm);
+        
+        %   Scale to be of order x
+        if norm(dx,2) > 10*norm(xOld,2)
+            dx = dx/norm(dx,2);
+        end
         
         %   Relax the step size to the gaurded value
         dx = guard.step(xOld,dx);
@@ -128,21 +134,61 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
         % =============================================== %
         
         %   Set-up
-        rNew       = r(xOld - dx)         ;
-        rNewNorm   = norm(rNew,2)         ;
-        notReduced = rNewNorm > rNormOld  ;
+        rNew       = r(xOld - dx)       ;
+        rNewNorm   = norm(rNew,2)       ;
+        notReduced = rNewNorm > rOldNorm;
+        hasNans    = isnan(rNewNorm)    ;
         
-        if notReduced   % Under-relaxation
+        
+        
+        if notReduced || hasNans
             
-            while notReduced
-                dx         = gammaUnder*dx          ;
-                rNew       = r(xOld - dx)           ;
-                rNewNorm   = norm(rNew,2)           ;
-                notReduced = rNewNorm > rNormOld    ;
+            
+            if hasNans %   Search for a better upper bound using simple back-tracking
+                
+                gammakm2 = 0;
+                gammakm1 = 1;
+                while any(isnan(rNew))
+                    gammakm1   = 0.5 * gammakm1         ;
+                    rNew       = r(xOld - gammakm1*dx)  ;
+                end
+                rkm2 = rOld ;
+                rkm1 = rNew ;
+
+            else
+
+                gammas    = [0,0.25,0.50,0.75,1]                                                        ;
+                rHalf     = [r(xOld - gammas(2)*dx),r(xOld - gammas(3)*dx),r(xOld - gammas(4)*dx)]      ;
+                rs        = [rOld,rHalf,rNew]                                                           ;
+                rsNorm    = [rOldNorm,norm(rHalf(:,1),2),norm(rHalf(:,2),2),norm(rHalf(:,3),2),rNewNorm];
+                [~,iSort] = sort(rsNorm)                                                                ;
+                gammas    = gammas(iSort)                                                               ;
+
+                gammakm1 = gammas(2)        ;
+                gammakm2 = gammas(1)        ;
+                rkm1     = rs(:,iSort(2))   ;
+                rkm2     = rs(:,iSort(1))   ;
+
             end
             
+            
+            %   Perform line-search
+            while norm(rkm1,2) >= rOldNorm
+                dxDotrkm1 = dx'*rkm1;
+                gammak    = gammakm1 - dxDotrkm1 * (gammakm1 - gammakm2)/(dxDotrkm1 - dx'*rkm2) ;
+                gammak    = (gammak<0 || gammak>1)*(gammakm1+gammakm2)/2 + (gammak>=0 & gammak<=1)*gammak;
+                rkm2      = rkm1                        ;
+                rkm1      = r(xOld - gammak*dx)         ;
+                gammakm2  = gammakm1                    ;
+                gammakm1  = gammak                      ;
+            end
+            rNew     = rkm1         ;
+            rNewNorm = norm(rNew,2) ;
+            dx       = gammakm1*dx  ;
+            
+            
         else % Over-relaxation
-
+            
             reduced    = not(notReduced);
             rTrack     = rNew           ;
             rNormTrack = rNewNorm       ;
@@ -157,13 +203,17 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
             rNew     = rTrack       ;
             rNewNorm = rNormTrack   ;
             dx       = dx/gammaOver ;
-
+            
         end
-
+        
         % Calculate relaxed x value
         xNew   = xOld - dx      ;
         dxNorm = norm(dx,Inf)   ;
-
+        
+        if any(isnan(xNL + rNewNorm))
+            g = [];
+        end
+        
     end
     
     

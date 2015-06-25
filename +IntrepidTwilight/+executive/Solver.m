@@ -26,8 +26,7 @@ function solver = Solver(problem)
     if isfield(problem.solver,'preconditioner')
         solver.preconditioner = IntrepidTwilight.executive.Preconditioner(problem);
     else
-        solver.preconditioner.apply  = @(x)    x    ;
-        solver.preconditioner.update = @(dum) [ ]   ;
+        solver.preconditioner = @(dum) struct('apply',@(x)x,'update',@(dum2)[]);
     end
             
     if not(isfield(problem.solver,'guard'))

@@ -6,24 +6,9 @@ function pc = Preconditioner(problem)
         case('block-jacobi')
             
             
-            blockSize = problem.solver.preconditioner.blockSize;
-            nColumns  = max(blockSize)                  ;
-            nBlocks   = numel(blockSize)                ;
-
-            
             %   Build economy identity matrix
-            s         = blockSize(1)                                ;
-            J         = 1:s                                         ;
-            I         = J                                           ;
-            rEye      = zeros(problem.miscellaneous.nEq,nColumns)   ;
-            rEye(I,J) = eye(blockSize(1))                           ;
-            for k = 2:nBlocks
-                J         = 1:blockSize(k)      ;
-                I         = s + J               ;
-                rEye(I,J) = eye(blockSize(k))   ;
-                s         = I(end)              ;
-            end
-
+            blockSize = problem.solver.preconditioner.blockSize;
+            rEye = arrayfun(@(e) eye(e),blockSize,'UniformOutput',false);
 
             %   Get initial dfdq
             dfdq = ...
@@ -33,11 +18,13 @@ function pc = Preconditioner(problem)
             drdq = rEye;
             
             %   Define preconditioner closure
-            pc = @(dt) struct('apply',@(q) applyBlockJacobi(q),'update',@(q) updateBlockJacobi(q,dt));
+            pc = @(dt) struct(...
+                'apply',@(q) applyBlockJacobi(q),...
+                'update',@(q) updateBlockJacobi(q,dt),...
+                'get',@() get());
             
         case('none')
-            pc.apply  = @(q) q  ; 
-            pc.update = @(q) [] ;
+            pc = @(dum) struct('apply',@(x)x,'update',@(dum)[],'get',@()[]);
             
     end
     
@@ -50,8 +37,11 @@ function pc = Preconditioner(problem)
         u = IntrepidTwilight.TenaciousReduction.blockDiagonalEconomy(drdq,q,blockSize);
     end
     function [] = updateBlockJacobi(q,dt)
-        dfdq = problem.semidiscretization.closure.blockDiagonalJacobian(q);
-        drdq = rEye - dt*dfdq;
+        dfdq = problem.semidiscretization.closure.blockDiagonalJacobian(q)      ;
+        drdq = cellfun(@(I,dF) I - dt*dF , rEye , dfdq,'UniformOutput',false)   ;
+    end
+    function j = get()
+        j = drdq;
     end
     
     

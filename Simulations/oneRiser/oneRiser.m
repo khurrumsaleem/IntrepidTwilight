@@ -1,4 +1,4 @@
-clc();
+% clc();
 clear();
 
 problem = IntrepidTwilight.new('problem');
@@ -71,7 +71,7 @@ problem.initialState.e = problem.initialState.rhoe0 ./ problem.initialState.rho0
 problem.initialState.T = Temperature(problem.initialState.rho0,problem.initialState.e);
 problem.initialState.P = Pressure(problem.initialState.rho0,problem.initialState.T)   ;
 
-problem.miscellaneous.epsilon = 1E-4;
+problem.miscellaneous.epsilon = 1E-8;
 
 
 
@@ -80,16 +80,20 @@ problem.semidiscretization.name         = 'Quasi2DUpwind'   ;
 problem.timeStepper.name                = 'implicitEuler'   ;
 problem.timeStepper.stepSize            = 0.2               ;
 problem.solver.name                     = 'JFNK'            ;
-problem.solver.preconditioner.type      = 'none'            ;
+% problem.solver.preconditioner.type      = 'none'            ;
+problem.solver.preconditioner.type      = 'block-jacobi'    ;
 problem.solver.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
+
 
 qHi = [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC];
 qLo = [1E-5*onesCV;-Inf*onesCV;-Inf*onesMC];
-problem.solver.guard.value = @(q)    guardValue(q,qLo,qHi);
-problem.solver.guard.step  = @(q,dq) guardStep(q,dq,qLo,qHi);
+problem.solver.guard.value = @(q)    guardValue(q,qLo,qHi,problem);
+problem.solver.guard.step  = @(q,dq) guardStep(q,dq,qLo,qHi,problem);
 
 simulation = IntrepidTwilight.new('simulation',problem);
 
-simulation.run([0,1],0.05,0.05);
+tic;
+simulation.run([0,1],0.1,0.1);
+toc;
 
 
