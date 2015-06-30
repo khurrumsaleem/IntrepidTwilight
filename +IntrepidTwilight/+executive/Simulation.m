@@ -49,7 +49,6 @@ function sim = Simulation(problem)
         
         %   Initialize preconditioner
         sim.solver.preconditioner = sim.pc(dt);
-        sim.solver.preconditioner.update(qSave(:,1));
         sim.f.updateTime(tStart);
         
         %   Save index
@@ -71,17 +70,17 @@ function sim = Simulation(problem)
             
             %   Calculate next time value
             sim.solver.preconditioner = sim.pc(step);
-            sim.solver.preconditioner.update(q);
+           
 
             %   Show condition number
-            Show(...
-                IntrepidTwilight.ConvenientMeans.conditionNumberMaximum(...
-                    sim.solver.preconditioner.get(),1));
+%             Show(...
+%                 IntrepidTwilight.ConvenientMeans.conditionNumberMaximum(...
+%                     sim.solver.preconditioner.get(),1));
 
             t = t + step;
             sim.f.updateTime(t);
             [q,stats] = IntrepidTwilight.TenaciousReduction.JFNK(...
-                q+1E-5*sim.f.rhs(q)  ,  sim.r(step)  ,  sim.solver);
+                q+1E-3*step*sim.f.rhs(q)  ,  sim.r(step)  ,  sim.solver);
 %             sim.ts.qUpdate(q);
 
             

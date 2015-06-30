@@ -39,11 +39,11 @@ problem.miscellaneous.sRhov = @(rho,rhoe,rhov,TD,t) 0;
 
 energySource = (1:12)'*0;
 energySource(8) = +5E7;
-problem.miscellaneous.sRhoe = @(rho,rhoe,rhov,TD,t) ((t > 0.01)&&(t<=0.02))*(energySource*(t-0.01)/(0.02-0.01)) + (t>0.02)*energySource;
+problem.miscellaneous.sRhoe = @(rho,rhoe,rhov,TD,t) 0;%((t > 0.01)&&(t<=0.02))*(energySource*(t-0.01)/(0.02-0.01)) + (t>0.02)*energySource;
 
 rho0 = 9.965569351080000e+02;
 e0   = 1.125536123942350e+05;
-v0   = 0.01;
+v0   = 1E-5;
 rhoe0 = rho0 * e0;
 rhov0 = rho0 * v0;
 onesCV = ones(problem.miscellaneous.nCV,1) ;
@@ -82,6 +82,7 @@ problem.timeStepper.stepSize            = 0.2               ;
 problem.solver.name                     = 'JFNK'            ;
 % problem.solver.preconditioner.type      = 'none'            ;
 problem.solver.preconditioner.type      = 'block-jacobi'    ;
+% problem.solver.preconditioner.type      = 'full-stagnant'   ;
 problem.solver.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
 
 
@@ -92,8 +93,15 @@ problem.solver.guard.step  = @(q,dq) guardStep(q,dq,qLo,qHi,problem);
 
 simulation = IntrepidTwilight.new('simulation',problem);
 
-tic;
-simulation.run([0,1],0.1,0.1);
-toc;
+% tic;
+% simulation.run([0,1],0.01,0.1);
+% toc;
 
 
+
+sd     = IntrepidTwilight.AdamantWave.Semidiscretizations.Quasi2DUpwind(problem);
+dfFull = IntrepidTwilight.ConvenientMeans.numericalJacobianFull(sd.rhs,problem.initialState.q0);
+dfFull = eye(size(dfFull)) - 0.1*dfFull;
+
+Lambda = eig(dfFull,'vector');
+Show(real(Lambda))

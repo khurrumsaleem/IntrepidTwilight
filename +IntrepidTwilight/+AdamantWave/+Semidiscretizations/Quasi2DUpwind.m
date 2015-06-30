@@ -3,7 +3,7 @@ function q2Dup = Quasi2DUpwind(model)
     % Return closure
     q2Dup.rhs                   = @(q) rhs(q)                   ;
     q2Dup.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
-    q2Dup.updateTime            = @(time) updateTime(time)      ;
+    q2Dup.update                = @(time) update(time)          ;
     
     
     
@@ -80,8 +80,6 @@ function q2Dup = Quasi2DUpwind(model)
 
     %   Jacobi finite difference epsilon
     epsilon  = model.miscellaneous.epsilon;
-    plusEps  = 1 + epsilon;
-    minusEps = 1 - epsilon;
 
 
     % Initialization for inclusion into the closure environment
@@ -112,12 +110,12 @@ function q2Dup = Quasi2DUpwind(model)
         updateClosureEnvironment();
         
         
-        f = [massRHS()/rhoDim;energyRHS()/rhoeDim;momentumRHS()/rhovDim];
+        f = [rhsMass()/rhoDim;rhsEnergy()/rhoeDim;rhsMomentum()/rhovDim];
         
     end
     
     
-    function [] = updateTime(time)
+    function [] = update(time)
         t = time;
     end
     
@@ -135,17 +133,17 @@ function q2Dup = Quasi2DUpwind(model)
         
         %   Momentum cell advection
         denom     = 1./(rhoBar(up)+rhoBar(down))                ;
-        alphaUp   = rhoBar(up).*rhov(up).*denom                 ;
-        alphaDown = rhoBar(up).*rhov(up).*denom                 ;
+        alphaUp   = rhov(up).*denom                             ;
+        alphaDown = rhov(up).*denom                             ;
         vMC       = alphaUp .* upDotN + alphaDown .* downDotN   ;
     end
     
     function [] = updateThermodynamicState()
         % Thermodynamic properites
-        TD.e    = rhoe ./ rho                           ;
-        [TD.T,TD.isTwoPhi] = Temperature(rho,TD.e,TD.T) ;
-        TD.P    = Pressure(rho,TD.T,false,TD.isTwoPhi)  ;
-        TD.rhoh = rhoe + TD.P                           ;
+        TD.e               = rhoe ./ rho                            ;
+        [TD.T,twoPhiState] = Temperature(rho,TD.e,TD.T)             ;
+        TD.P               = Pressure(rho,TD.T,false,twoPhiState)   ;
+        TD.rhoh            = rhoe + TD.P                            ;
     end
 
 
@@ -158,7 +156,7 @@ function q2Dup = Quasi2DUpwind(model)
                              Mass RHS
     ===========================================================
     %}
-    function f = massRHS()
+    function f = rhsMass()
         
         % Advection term
         vzRho = vCV.*(  (vCV>0).*rho(from) + (vCV<=0).*rho(to)  );
@@ -176,7 +174,7 @@ function q2Dup = Quasi2DUpwind(model)
                             Energy RHS
     ===========================================================
     %}
-    function f = energyRHS()
+    function f = rhsEnergy()
         
         % Advection term
         vzRhoh = vCV.*(  (vCV>0).*TD.rhoh(from)  + (vCV<=0).*TD.rhoh(to)  );
@@ -193,7 +191,7 @@ function q2Dup = Quasi2DUpwind(model)
                           Momentum RHS
     ===========================================================
     %}
-    function f = momentumRHS()
+    function f = rhsMomentum()
         
         
         % Upwind/downwind momentum advection
@@ -223,15 +221,15 @@ function q2Dup = Quasi2DUpwind(model)
         
         %   Perturbed values
         aboveOne = abs(rhoRef) >= 1;
-        rhoStep  = epsilon*rhoRef.*aboveOne + epsilon*not(aboveOne);
+        rhoStep  = epsilon*(rhoRef.*aboveOne + not(aboveOne));
         rhoTD    = rhoRef +  rhoStep;
         %
         aboveOne = abs(rhoeRef) >= 1;
-        rhoeStep  = epsilon*rhoeRef.*aboveOne + epsilon*not(aboveOne);
+        rhoeStep  = epsilon*(rhoeRef.*aboveOne + not(aboveOne));
         rhoeTD    = rhoeRef +  rhoeStep;
         %
         aboveOne = abs(rhovRef) >= 1;
-        rhovStep  = epsilon*rhovRef.*aboveOne + epsilon*not(aboveOne);
+        rhovStep  = epsilon*(rhovRef.*aboveOne + not(aboveOne));
         rhovTD    = rhovRef +  rhovStep;
         %
         %   Build large perturbed arrays for fast Thermodynamic update
@@ -271,7 +269,7 @@ function q2Dup = Quasi2DUpwind(model)
         
         %   Get unperturbed value
         updateVelocity();
-        mass0 = massRHS();
+        mass0 = rhsMass();
 
 
         % Iterate through columns of the block
@@ -286,7 +284,7 @@ function q2Dup = Quasi2DUpwind(model)
             TD.P(k)    = Pblock(nCVk);
             TD.rhoh(k) = rhohBlock(nCVk);
             updateVelocity();
-            massPlus  = massRHS();
+            massPlus  = rhsMass();
 
             %   Calculate
             dfdq{1}(:,k) = (massPlus - mass0)/(rhoStep(k));
@@ -300,8 +298,6 @@ function q2Dup = Quasi2DUpwind(model)
 
         end
 
-        dfdq{1} = dfdq{1}/rhoDim;
-
 
 
         % ========================================================= %
@@ -310,7 +306,7 @@ function q2Dup = Quasi2DUpwind(model)
         
         %   Get unperturbed value
         updateVelocity();
-        energy0 = energyRHS();
+        energy0 = rhsEnergy();
         
         %   Iterate through columns of the block
         for k = K
@@ -323,7 +319,7 @@ function q2Dup = Quasi2DUpwind(model)
             TD.P(k)    = Pblock(nCVk);
             TD.rhoh(k) = rhohBlock(nCVk);
             updateVelocity();
-            energyPlus = energyRHS();
+            energyPlus = rhsEnergy();
 
             %   Calculate
             dfdq{2}(:,k) = (energyPlus - energy0)/(rhoeStep(k));
@@ -337,8 +333,6 @@ function q2Dup = Quasi2DUpwind(model)
 
         end
 
-        dfdq{2} = dfdq{2}/rhoeDim;
-
 
 
         % ========================================================= %
@@ -347,7 +341,7 @@ function q2Dup = Quasi2DUpwind(model)
         
         %   Get unperturbed value
         updateVelocity();
-        momentum0 = momentumRHS();
+        momentum0 = rhsMomentum();
 
         %   Iterate through columns of the block
         K = 1:nMC;
@@ -360,7 +354,7 @@ function q2Dup = Quasi2DUpwind(model)
             TD.P(k)    = Pblock(nMCk);
             TD.rhoh(k) = rhohBlock(nMCk);
             updateVelocity();
-            momentumPlus = momentumRHS();
+            momentumPlus = rhsMomentum();
 
             %   Calculate
             dfdq{3}(:,k) = (momentumPlus - momentum0)/(rhovStep(k));
@@ -374,20 +368,22 @@ function q2Dup = Quasi2DUpwind(model)
 
         end
         
-        dfdq{3} = dfdq{3}/rhovDim;
-        
         
         %   Reset all mutations to closure environment
-        rho  = rhoRef  / rhoDim     ;
-        rhoe = rhoeRef / rhoeDim    ;
-        rhov = rhovRef / rhovDim    ;
-        TD   = TDref                ;
+        rho  = rhoRef   ;
+        rhoe = rhoeRef  ;
+        rhov = rhovRef  ;
+        TD   = TDref    ;
         
         
         %   Pass out block diagonal
         dfdqOut = dfdq;
         
     end
+    
+    
+    
+    
     
     
 end

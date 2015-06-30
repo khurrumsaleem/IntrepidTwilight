@@ -1,9 +1,34 @@
-function r = Residual(problem)
+function r = Residual(timeDiscretization)
 
-    r  = @(dt) @(q) value(q,dt) ;
+    ts                      = timeDiscretization            ;
+    r                       = @(q) value(q)                 ;
+    r.update                = @(q,t,dt) update(q,t,dt)      ;
+    r.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
+    r.jacobian              = @(q) jacobian(q)              ;
     
-    function r = value(q,dt)
-        r = (q - problem.timeStepper.closure.qLast()) - problem.timeStepper.closure.deltaq(q,dt);
+
+    %   Residual value
+    function r = value(q)
+        r = q - ts.qStar();
+    end
+
+
+
+    %   Update functions
+    function [] = update(q,t,dt)
+        ts.update(q,t,dt);
+    end
+
+
+
+    %   Jacobians
+    function drdq = blockDiagonalJacobian(q)
+        dfdq = ts.blockDiagonalJacobian(q)                              ;
+        drdq = cellfun(@(c) eye(size(c)) - c,dfdq,'UniformOutput',false);
+    end
+    function drdq = jacobian(q)
+        dfdq = ts.jacobian(q)           ;
+        drdq = eye(size(dfdq)) - dfdq   ;
     end
     
 end

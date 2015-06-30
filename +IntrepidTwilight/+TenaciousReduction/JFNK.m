@@ -47,7 +47,7 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
     rNL     = r(xNL)        ;
     rNLnorm = norm(rNL,2)   ;
     
-    preconditioner.update(xNL);
+    preconditioner.initialize(xNL);
     
     
     % Counter and residual
@@ -70,12 +70,8 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
     stepNotDone    = dxNorm  > dxTolerance ;
     notConverged   = (normNotDone || stepNotDone) && (iter <= iterMax);
     xNLm1          = xNL;
-    
-    
-    if any(isnan(xNL + rNL))
-        g = [];
-    end
-    
+
+
     while notConverged
         
         %   Get the Newton update with back-tracking
@@ -119,11 +115,6 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
         % Solve linear system to within linearTolerance
         dx = GMRES(xOld,rOld,rOldNorm);
         
-        %   Scale to be of order x
-        if norm(dx,2) > 10*norm(xOld,2)
-            dx = dx/norm(dx,2);
-        end
-        
         %   Relax the step size to the gaurded value
         dx = guard.step(xOld,dx);
         
@@ -142,49 +133,13 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
         
         
         if notReduced || hasNans
-            
-            
-            if hasNans %   Search for a better upper bound using simple back-tracking
-                
-                gammakm2 = 0;
-                gammakm1 = 1;
-                while any(isnan(rNew))
-                    gammakm1   = 0.5 * gammakm1         ;
-                    rNew       = r(xOld - gammakm1*dx)  ;
-                end
-                rkm2 = rOld ;
-                rkm1 = rNew ;
 
-            else
-
-                gammas    = [0,0.25,0.50,0.75,1]                                                        ;
-                rHalf     = [r(xOld - gammas(2)*dx),r(xOld - gammas(3)*dx),r(xOld - gammas(4)*dx)]      ;
-                rs        = [rOld,rHalf,rNew]                                                           ;
-                rsNorm    = [rOldNorm,norm(rHalf(:,1),2),norm(rHalf(:,2),2),norm(rHalf(:,3),2),rNewNorm];
-                [~,iSort] = sort(rsNorm)                                                                ;
-                gammas    = gammas(iSort)                                                               ;
-
-                gammakm1 = gammas(2)        ;
-                gammakm2 = gammas(1)        ;
-                rkm1     = rs(:,iSort(2))   ;
-                rkm2     = rs(:,iSort(1))   ;
-
-            end
-            
-            
-            %   Perform line-search
-            while norm(rkm1,2) >= rOldNorm
-                dxDotrkm1 = dx'*rkm1;
-                gammak    = gammakm1 - dxDotrkm1 * (gammakm1 - gammakm2)/(dxDotrkm1 - dx'*rkm2) ;
-                gammak    = (gammak<0 || gammak>1)*(gammakm1+gammakm2)/2 + (gammak>=0 & gammak<=1)*gammak;
-                rkm2      = rkm1                        ;
-                rkm1      = r(xOld - gammak*dx)         ;
-                gammakm2  = gammakm1                    ;
-                gammakm1  = gammak                      ;
-            end
-            rNew     = rkm1         ;
-            rNewNorm = norm(rNew,2) ;
-            dx       = gammakm1*dx  ;
+            alphaMin = ...
+                IntrepidTwilight.ConvenientMeans.goldenSectionSearch(...
+                    @(alpha) norm(r(xOld - alpha*dx),2),[0,1],[rOldNorm,rNewNorm],0.01);
+            rNew     = r(xOld - alphaMin*dx);
+            rNewNorm = norm(rNew,2)         ;
+            dx       = alphaMin*dx          ;
             
             
         else % Over-relaxation
@@ -209,10 +164,6 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
         % Calculate relaxed x value
         xNew   = xOld - dx      ;
         dxNorm = norm(dx,Inf)   ;
-        
-        if any(isnan(xNL + rNewNorm))
-            g = [];
-        end
         
     end
     
@@ -312,12 +263,15 @@ function [xNL,varargout] = JFNK(x0,r,parameters)
         % Update to x
         Rtilde = triu(R(1:k,1:k));
         
-        if rcond(Rtilde) > 10*eps()
+        if rcond(Rtilde) > 100*eps()
             yk = Rtilde \ alpha(1:k);   % Solve the least-squares problem
         else
-            S  = diag(1./diag(Rtilde));
-            yk = (Rtilde*S) \ alpha(1:k);
-            yk = S*yk;
+%             S  = diag(1./diag(Rtilde));
+%             yk = (Rtilde*S) \ alpha(1:k);
+            yk = IntrepidTwilight.ConvenientMeans.upperTriangularLinearSolver(Rtilde,alpha(1:k));
+            yk = IntrepidTwilight.ConvenientMeans.illConditionedLinearSolve(...
+                Rtilde,alpha(1:k),yk,0);
+%             yk = S*yk;
         end
         
         dx = Z(:,1:k) * yk                  ;   % Calculate full Newton update
