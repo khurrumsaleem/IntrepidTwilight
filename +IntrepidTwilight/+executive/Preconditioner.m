@@ -1,42 +1,35 @@
-function pc = Preconditioner(problem)
+function pc = Preconditioner(Residual,type)
+    
+    r    = Residual ;
+    drdq = []       ;
     
     
-    switch(lower(problem.solver.preconditioner.type))
+    switch(lower(type))
 
         case('full-stagnant')
-            
-            %   Define preconditioner closure
-            pc = @(dt) struct(...
+
+            pc = struct(...
                 'apply'      , @(q) applyFullJacobian(q)        ,...
-                'initialize' , @(q) initializeFullJacobian(q,dt),...
+                'initialize' , @(q) initializeFullJacobian(q)   ,...
                 'update'     , @(q) []                          ,...
-                'get'        , @() get());
-        
+                'get'        , @() get()                        );
 
         case('block-jacobi')
-            
-            
-            %   Build economy identity matrix
-            blockSize = problem.solver.preconditioner.blockSize;
-            rEye = arrayfun(@(e) eye(e),blockSize,'UniformOutput',false);
 
-            %   Get initial dfdq
-            dfdq = ...
-                problem.semidiscretization.closure.blockDiagonalJacobian(problem.initialState.q0);
-            
-            %   Initialize drdq
-            drdq = rEye;
-            
-            %   Define preconditioner closure
-            pc = @(dt) struct(...
-                'apply'      , @(q) applyBlockJacobi(q),...
-                'initialize' , @(q) updateBlockJacobi(q,dt),...
-                'update'     , @(q) updateBlockJacobi(q,dt),...
-                'get'        , @() get());
-            
+            pc = struct(...
+                'apply'      , @(q) applyBlockJacobi(q)     ,...
+                'initialize' , @(q) updateBlockJacobi(q,dt) ,...
+                'update'     , @(q) updateBlockJacobi(q,dt) ,...
+                'get'        , @() get()                    );
+
         case('none')
-            pc = @(dum) struct('apply',@(x)x,'update',@(dum)[],'get',@()[]);
-            
+
+            pc = struct(...
+                'apply'      , @(q) q    ,...
+                'initialize' , @(q) q    ,...
+                'update'     , @(q) []   ,...
+                'get'        , @()  []   );
+
     end
     
     
@@ -45,11 +38,10 @@ function pc = Preconditioner(problem)
     %                         Block-Jacobi functions                          %
     % ======================================================================= %
     function u = applyBlockJacobi(q)
-        u = IntrepidTwilight.TenaciousReduction.blockDiagonalEconomy(drdq,q,blockSize);
+        u = IntrepidTwilight.TenaciousReduction.blockDiagonalEconomy(drdq,q);
     end
-    function [] = updateBlockJacobi(q,dt)
-        dfdq = problem.semidiscretization.closure.blockDiagonalJacobian(q)      ;
-        drdq = cellfun(@(I,dF) I - dt*dF , rEye , dfdq,'UniformOutput',false)   ;
+    function [] = updateBlockJacobi(q)
+        drdq = r.blockDiagonalJacobian(q);
     end
     function j = get()
         j = drdq;
@@ -58,15 +50,13 @@ function pc = Preconditioner(problem)
 
 
     % ======================================================================= %
-    %                         Block-Jacobi functions                          %
+    %                         Staganat Full functions                         %
     % ======================================================================= %
     function u = applyFullJacobian(q)
         u = drdq \ q;
     end
-    function [] = initializeFullJacobian(q,dt)
-        dfdq = IntrepidTwilight.ConvenientMeans.numericalJacobianFull(...
-            problem.semidiscretization.closure.rhs,q);
-        drdq = eye(size(dfdq)) - dt*dfdq                                ;
+    function [] = initializeFullJacobian(q)
+        drdq = r.jacobian(q);
     end
     
     

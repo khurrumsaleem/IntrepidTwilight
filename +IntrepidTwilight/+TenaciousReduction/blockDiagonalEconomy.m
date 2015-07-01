@@ -1,6 +1,7 @@
-function x = blockDiagonalEconomy(D,x,blockSize)
+function x = blockDiagonalEconomy(D,x)
     
-    x = mat2cell(x,blockSize);
+    blockSize = cellfun(@(c) length(c),D);
+    x         = mat2cell(x,blockSize);
 
     for k = 1:numel(D)
         x{k} = D{k} \ x{k};
