@@ -1,6 +1,6 @@
-function pc = Preconditioner(Residual,type)
+function pc = Preconditioner(residual,type)
     
-    r    = Residual ;
+    r    = residual ;
     drdq = []       ;
     
     
@@ -18,8 +18,8 @@ function pc = Preconditioner(Residual,type)
 
             pc = struct(...
                 'apply'      , @(q) applyBlockJacobi(q)     ,...
-                'initialize' , @(q) updateBlockJacobi(q,dt) ,...
-                'update'     , @(q) updateBlockJacobi(q,dt) ,...
+                'initialize' , @(q) updateBlockJacobi(q)    ,...
+                'update'     , @(q) updateBlockJacobi(q)    ,...
                 'get'        , @() get()                    );
 
         case('none')

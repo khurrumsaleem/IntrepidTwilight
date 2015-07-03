@@ -13,6 +13,8 @@ function md = model()
     md.controlVolume.internalEnergy = [];
     md.controlVolume.enthalpy       = [];
     md.controlVolume.entropy        = [];
+    md.controlVolume.source.mass    = [];
+    md.controlVolume.source.energy  = [];
 
     
     % ========================================================= %
@@ -25,26 +27,22 @@ function md = model()
     
     
     %   Flow direction
-    md.momentumCell.flowX       = [];
-    md.momentumCell.flowY       = [];
-    md.momentumCell.volumeBack  = [];
-    md.momentumCell.volumeFront = [];
-    md.momentumCell.LoD         = [];
+    md.momentumCell.directionX      = [];
+    md.momentumCell.directionY      = [];
+    md.momentumCell.volumeBack      = [];
+    md.momentumCell.volumeFront     = [];
+    md.momentumCell.LoD             = [];
+    md.momentumCell.loss.friction   = [];
+    md.momentumCell.source.momentum = [];
 
     
     %   Interfaces
-    md.interface.volumeUp   = [];  %   Upwind volume
-    md.interface.volumeDown = [];  %   Downwind volume
-    md.interface.normalX    = [];  %   Surface normal
-    md.interface.normalY    = [];  %   Surface normal
-    md.interface.area       = [];  %   Flow area
-    
-    
-    
-    %   Private meta-information
-    meta.type    = 'model'      ;
-    meta.package = 'AdamantWave';
-    
-    md.meta = @(s) meta.(s);
-    
+    md.interface.volumeUp    = [];  %   Upwind volume
+    md.interface.volumeDown  = [];  %   Downwind volume
+    md.interface.normalX     = [];  %   Surface normal
+    md.interface.normalY     = [];  %   Surface normal
+    md.interface.surfaceArea = [];  %   Flow area
+    md.interface.loss.form   = [];  %   Form loss coefficient
+
+
 end

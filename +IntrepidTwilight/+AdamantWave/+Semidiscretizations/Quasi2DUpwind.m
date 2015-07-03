@@ -1,7 +1,10 @@
 function q2Dup = Quasi2DUpwind(model)
     
     % Return closure
-    q2Dup.rhs                   = @(q) rhs(q)                   ;
+    q2Dup.rhs                   = @(q)    rhs(q)                ;
+    q2Dup.rhsMass               = @(rho)  rhsMass (rho)         ;
+    q2Dup.rhsEnergy             = @(rhoe) rhsEnergy(rhoe)       ;
+    q2Dup.rhsMomentum           = @(rhov) rhsMomentum(rhov)     ;
     q2Dup.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
     q2Dup.update                = @(time) update(time)          ;
     
@@ -156,7 +159,11 @@ function q2Dup = Quasi2DUpwind(model)
                              Mass RHS
     ===========================================================
     %}
-    function f = rhsMass()
+    function f = rhsMass(rhoStar)
+        
+        if (nargin >= 1)
+            rho = rhoStar * rhoDim;
+        end
         
         % Advection term
         vzRho = vCV.*(  (vCV>0).*rho(from) + (vCV<=0).*rho(to)  );
@@ -174,7 +181,12 @@ function q2Dup = Quasi2DUpwind(model)
                             Energy RHS
     ===========================================================
     %}
-    function f = rhsEnergy()
+    function f = rhsEnergy(rhoeStar)
+        
+        if (nargin >= 1)
+            rhoe = rhoeStar * rhoeDim;
+        end
+        
         
         % Advection term
         vzRhoh = vCV.*(  (vCV>0).*TD.rhoh(from)  + (vCV<=0).*TD.rhoh(to)  );
@@ -191,7 +203,11 @@ function q2Dup = Quasi2DUpwind(model)
                           Momentum RHS
     ===========================================================
     %}
-    function f = rhsMomentum()
+    function f = rhsMomentum(rhovStar)
+        
+        if (nargin >= 1)
+            rhov = rhovStar * rhovDim;
+        end
         
         
         % Upwind/downwind momentum advection
