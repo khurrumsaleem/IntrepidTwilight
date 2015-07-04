@@ -1,4 +1,4 @@
-function jfnk = JFNK(residual,preconditioner)
+function jfnk = JFNK(residual,preconditioner,guard)
     
     %   Default parameters
     jfnk.tolernace.residual       = 1E-7   ;
@@ -12,9 +12,13 @@ function jfnk = JFNK(residual,preconditioner)
     
     
     
-    %   Object bindings
-    r  = 0;     rs  = 0;
-    pc = 0;     pcs = 0;
+    %   Declare containers for cell inputs (defined in set)
+    guards          = 0;
+    residuals       = 0;
+    preconditioners = 0;
+    
+    %   Set objects
+    set('guard'         ,guard);
     set('residual'      ,residual);
     set('preconditioner',preconditioner);
     
@@ -30,13 +34,7 @@ function jfnk = JFNK(residual,preconditioner)
     %   Public methods
     jfnk.allocateWorkArrays = @(x) allocateWorkArrays(x)        ;
     jfnk.set                = @(type,object) set(type,object)   ;
-    
-    if iscell(r)
-        jfnk.solve    = @(x) solveAll(x);
-        jfnk.solveOne = @(x) solve(x)   ;
-    else
-        jfnk.solve    = @(x) solve(x);
-    end
+    jfnk.solve              = @(x) solve(x)                     ;
 
 
 
@@ -46,21 +44,20 @@ function jfnk = JFNK(residual,preconditioner)
     arraysAreNotAllocated = true();
     function [] = allocateWorkArrays(x)
         
-        %   Determine row ...
-        if iscell(r)
-            nRows = max(cellfun(@(rk,xk) numel(rk(xk)),r,x));
+        %   Determine row count
+        if iscell(x)
+            nRows = max(cellfun(@(c) numel(c),x));    
         else
-            nRows = numel(r(x));
+            nRows = numel(x);    
         end
-        %
-        %    and then column count
-        if (jfnk.gmres.iteration.restart == -1)
-            nCols              = nRows;
-            jfnk.gmres.maximum = nCols;
+        
+        %   Determine column count
+        if (jfnk.gmres.iteration.iteration.maximum == -1)
+            nCols                        = nRows;
+            jfnk.gmres.iteration.maximum = nCols;
         else
             nCols = jfnk.gmres.iteration.maximum;
         end
-        
 
         %   Allocate
         Z(nRows,nCols)   = 0        ;
@@ -76,135 +73,220 @@ function jfnk = JFNK(residual,preconditioner)
 
 
 
+
     % ================================================================= %
     %                       Mutators/Re-binders                         %
     % ================================================================= %
     function [] = set(type,object)
         switch(lower(type))
             case('residual')
-                if iscell(object);
-                    rs = object;
+                if iscell(object)
+                    residuals = object; 
                 else
-                    r = object;
+                    residual = object;
                 end
             case('preconditioner')
-                if iscell(object);
-                    pcs = object;
+                if iscell(object)
+                    preconditioners = object; 
                 else
-                    pc = object;
+                    preconditioner = object;
+                end
+            case('guard')
+                if iscell(object)
+                    guards = object;
+                else
+                    guard = object;
                 end
         end
     end
-    
-    
 
-    % ================================================================= %
-    %                       Non-Linear Solver                           %
-    % ================================================================= %
+
     
-    %   Cell intermediary
-    function [xNL,stats] = solveAll(xNL)
-        n     = length(rs);
-        stats = cell(1,n);
-        for k = 1:n
-            r                 = rs{k};
-            pc                = pcs{k};
-            [xNL{k},stats{k}] = solve(xNL{k});
+    
+    % ================================================================= %
+    %                      Wrapper Solve Function                       %
+    % ================================================================= %
+    function [xNL,stats] = solve(xNL)
+        if iscell(xNL)
+            [xNL,stats] = solveSegregated(xNL);
+        else
+            [xNL,stats] = solveCoupled(xNL);
         end
     end
+
+
+
+
+
+    % ================================================================= %
+    %                    Fully-Coupled Solver                           %
+    % ================================================================= %
     
-    %   Core solver
-    function [xNL,varargout] = solve(xNL)
-        
-        %   Parameter defintion/unpacking
-        iterMax      = jfnk.iterationMaximum    ;
-        rNLTolerance = jfnk.tolerance.residual  ;
-        dxTolerance  = jfnk.tolerance.step      ;
-        guard        = jfnk.guard               ;
-        
-        
+    function [xNL,stats] = solveCoupled(xNL)
+
         %   Allocate arrays if not done already
         if arraysAreNotAllocated
              allocateWorkArrays(xNL);
         end
-        
-        
-        
-        
-        % ----------------------------------------------- %
-        %                    Initialize                   %
-        % ----------------------------------------------- %
 
-        %   Let the gaurd make sure xNL is to its liking
-        xNL = guard.value(xNL);
         
-        %   Initialization
-        rNL     = r(xNL)        ;
-        rNLnorm = norm(rNL,2)   ;
-        pc.initialize(xNL);
+        % ----------------------------------------------- %
+        %                Non-Linear Iterations            %
+        % ----------------------------------------------- %
         
-        % Counter and residual
-        rNormVec(iterMax,1) = 0         ;
-        rNormVec(1)         = rNLnorm   ;
-        iter                = 2         ;
+        %   Initialize stuff
+        [rNL,rNLnorm,stats] = initialize(xNL)                   ;
+        notConverged        = rNLnorm > jfnk.tolerance.residual ;
         
+        %   Iterate
+        while notConverged
+            
+            %   Take a step
+            [xNL,rNL,dxNorm,rNLnorm,stats] = nonlinearStep(xNL,rNL,rNLnorm,stats);
+            
+            %   Display run-time stuff
+            Show(rNLnorm);
+            
+            %   Iteration clean-up
+            normNotDone           =     rNLnorm      >  jfnk.tolerance.residual             ;
+            stepNotDone           =      dxNorm      >  jfnk.tolerance.stepSize             ;
+            belowIterationMaximum = stats.iterations <= jfnk.iterationMaximum               ;
+            notConverged          = (normNotDone || stepNotDone) && belowIterationMaximum   ;
+
+        end
+        
+        
+        %   Contract vector to the number of actuall iterations 
+        stats.rNorm = stats.rNorm(1:stats.iterations)  ;
+
+    end
+
+
+
+
+
+    % ================================================================= %
+    %                       Segregated Solver                           %
+    % ================================================================= %
+    
+    function [xNL,stats] = solveSegregated(xNL)
+        
+        %   Allocate arrays if not done already
+        if arraysAreNotAllocated
+            allocateWorkArrays(xNL);
+        end
         
         
         % ----------------------------------------------- %
         %                Non-Linear Iterations            %
         % ----------------------------------------------- %
         
-        %   First iteration
-        [dxNorm,xNL,rNL,rNLnorm] = newtonUpdate(xNL,rNL,rNLnorm);
-        pc.update(xNL);
-        rNormVec(iter) = rNLnorm    ;
-        iter           = iter + 1   ;
-        normNotDone    = rNLnorm > rNLTolerance;
-        stepNotDone    = dxNorm  > dxTolerance ;
-        notConverged   = (normNotDone || stepNotDone) && (iter <= iterMax);
-        xNLm1          = xNL;
+        %   Allocate
+        n                     = numel(xNL)  ;
+        rNL{n,1}              = 0           ;
+        rNLnorm(n,1)          = 0           ;
+        dxNorm(n,1)           = 0           ;
+        stats(n,1).iterations = 0           ;
+        
+        %   Initialize
+        for k = 1:n
+            [rNL{k},rNLnorm(k),stats(k)] = initialize(xNL{k});
+        end
+        notConverged = all(rNLnorm > jfnk.tolerance.residual);
         
         
+        %   Iterate
         while notConverged
             
-            %   Get the Newton update with back-tracking
-            [dxNorm,xNL,rNL,rNLnorm] = newtonUpdate(xNL,rNL,rNLnorm);
-            
-            
-            %   Extrapolate solution
-            dxExtrap    = rNL .* (xNL - xNLm1)./(rNL - rNormVec(iter-1));
-            xExtrap     = xNL - dxExtrap    ;
-            rExtrap     = r(xExtrap)        ;
-            rExtrapNorm = norm(rExtrap,2)   ;
-            if rExtrapNorm < 0.9*rNLnorm
-                xNL     = xExtrap       ;
-                rNL     = rExtrap       ;
-                rNLnorm = rExtrapNorm   ;
+            for k = 1:n
+                
+                %   Assign this block's objects
+                residual       = residuals{k}       ;
+                preconditioner = preconditioners{k} ;
+                guard          = guards{k}          ;
+                
+                
+                %   Take a step
+                [xNL{k},rNL{k},dxNorm(k),rNLnorm(k),stats(k)] = ...
+                    nonlinearStep(xNL{k},rNL{k},rNLnorm(k),stats(k));
+                
+                %   Display run-time stuff
+                fprintf('Block %d:\n\t',k);
+                Show(rNLnorm{k});
             end
             
-            %   Update preconditions
-            pc.update(xNL);
-            Show(rNLnorm);
-            
             %   Iteration clean-up
-            xNLm1          = xNL        ;
-            rNormVec(iter) = rNLnorm    ;
-            iter           = iter + 1   ;
-            normNotDone    = rNLnorm > rNLTolerance;
-            stepNotDone    = dxNorm  > dxTolerance ;
-            notConverged   = (normNotDone || stepNotDone) && (iter <= iterMax);
+            normNotDone           = all(       rNLnorm       >  jfnk.tolerance.residual)    ;
+            stepNotDone           = all(        dxNorm       >  jfnk.tolerance.stepSize)    ;
+            belowIterationMaximum =      stats(1).iterations <= jfnk.iterationMaximum       ;
+            notConverged          = (normNotDone || stepNotDone) && belowIterationMaximum   ;
+            
         end
         
-        
-        if (nargout > 1)
-            stats.iterations = iter - 1                     ;
-            stats.norm       = rNormVec(1:stats.iterations) ;
-            varargout{1}     = stats                        ;
+        %   Contract vector to the number of actuall iterations
+        for k = 1:n
+            stats(k).rNorm = stats(k).rNorm(1:stats(k).iterations);
         end
+        
     end
-    
-    
-    function [dxNorm,xNew,rNew,rNewNorm] = newtonUpdate(xOld,rOld,rOldNorm)
+
+
+
+
+
+    % ================================================================= %
+    %                 Sub-parts of Nonlinear Solvers                    %
+    % ================================================================= %
+
+
+    function [rNL,rNLnorm,stats] = initialize(xNL)
+        
+        %   Guard against the initial value
+        xNL = guard.value(xNL);
+        
+        %   Initialization
+        rNL     = residual(xNL)         ;
+        rNLnorm = norm(rNL,2)           ;
+        preconditioner.initialize(xNL)  ;
+        
+        % Counter and residual
+        stats.rNorm(jfnk.iterationMaximum,1) = 0        ;
+        stats.rNorm(1)                       = rNLnorm  ;
+        stats.iterations                     = 1        ;
+
+    end
+
+
+
+    function [xNL,rNL,rNLnorm,dxNorm,params] = nonlinearStep(xNLm1,rNLm1,rNLnorm,params)
+        
+        %   Advance in a descent direction
+        [xNL,rNL,rNLnorm,dxNorm] = quasiNewtonUpdate(xNLm1,rNLm1,rNLnorm);
+        
+        
+        %   Extrapolate solution
+        dxExtrap    = rNL .* (xNL - xNLm1)./(rNL - rNLm1);
+        xExtrap     = xNL - dxExtrap    ;
+        rExtrap     = residual(xExtrap) ;
+        rExtrapNorm = norm(rExtrap,2)   ;
+        if rExtrapNorm < 0.9*rNLnorm
+            xNL     = xExtrap       ;
+            rNL     = rExtrap       ;
+            rNLnorm = rExtrapNorm   ;
+        end
+        
+        %   Update preconditions
+        preconditioner.update(xNL);
+        Show(rNLnorm);
+        
+        %   Iteration clean-up
+        params.iterations  = params.iterations + 1  ;
+        params.rNorm(iter) = rNLnorm                ;
+    end
+
+
+
+    function [xNew,rNew,rNewNorm,dxNorm] = quasiNewtonUpdate(xOld,rOld,rOldNorm)
         
         % Solve linear system to within linearTolerance
         dx = GMRES(xOld,rOld,rOldNorm);
@@ -212,38 +294,34 @@ function jfnk = JFNK(residual,preconditioner)
         %   Relax the step size to the gaurded value
         dx = guard.step(xOld,dx);
         
-        
-        
-        % =============================================== %
-        %                       Relaxation                %
-        % =============================================== %
-        
         %   Set-up
-        rNew       = r(xOld - dx)       ;
+        rNew       = residual(xOld - dx);
         rNewNorm   = norm(rNew,2)       ;
         notReduced = rNewNorm > rOldNorm;
         hasNans    = isnan(rNewNorm)    ;
         
         
-        
         if notReduced || hasNans
             
+            %   If full step didn't reduce rssidual or produced NaNs, 
+            %   search for a better, smaller step.
             alphaMin = ...
                 IntrepidTwilight.ConvenientMeans.goldenSectionSearch(...
-                @(alpha) norm(r(xOld - alpha*dx),2),[0,1],[rOldNorm,rNewNorm],0.01);
-            rNew     = r(xOld - alphaMin*dx);
+                @(alpha) norm(residual(xOld - alpha*dx),2),[0,1],[rOldNorm,rNewNorm],0.01);
+            rNew     = residual(xOld - alphaMin*dx);
             rNewNorm = norm(rNew,2)         ;
             dx       = alphaMin*dx          ;
             
             
-        else % Over-relaxation
+        else
             
+            % Over-relaxation
             reduced    = not(notReduced);
             rTrack     = rNew           ;
             rNormTrack = rNewNorm       ;
             while reduced
                 dx         = jfnk.newton.relax.over * dx        ;
-                rNew       = r(xOld - dx)                       ;
+                rNew       = residual(xOld - dx)                ;
                 rNewNorm   = norm(rNew,2)                       ;
                 reduced    = rNewNorm < 0.9*rNormTrack          ;
                 rTrack     = rNew*reduced + rTrack*(1-reduced)  ;
@@ -260,15 +338,11 @@ function jfnk = JFNK(residual,preconditioner)
         dxNorm = norm(dx,Inf)   ;
         
     end
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
+
+
+
+
     % ================================================================= %
     %                              GMRES                                %
     % ================================================================= %
@@ -300,8 +374,8 @@ function jfnk = JFNK(residual,preconditioner)
         
         % First Step (k = 1)
         % Compute J*z1 and store in R
-        w      = pc.apply(Z(:,1));
-        R(:,1) = (r(xk + epsilon*w) - rk0) / epsilon;
+        w      = preconditioner.apply(Z(:,1));
+        R(:,1) = (residual(xk + epsilon*w) - rk0) / epsilon;
         
         % Compute Householder vector to bring R(:,1) into upper triangular form
         e      = [1 ; Zeros]                        ;
@@ -329,14 +403,14 @@ function jfnk = JFNK(residual,preconditioner)
             
             % Choose the next basis vector
             if rkNorm <= nu*rkm1Norm
-                Z(:,k) = rk/rkNorm ;   %   GCR (RB-SGMRES) basis
+                Z(:,k) = rk/rkNorm  ;   %   GCR (RB-SGMRES) basis
             else
                 Z(:,k) = q          ;   %   Simpler GMRES basis
             end
             
             % Compute and store A*zk in R
-            w      = pc.apply(Z(:,k));
-            R(:,k) = (r(xk + epsilon*w) - rk0) / epsilon;
+            w      = preconditioner.apply(Z(:,k));
+            R(:,k) = (residual(xk + epsilon*w) - rk0) / epsilon;
             
             % Apply all previous projections to new the column
             for m = 1:k-1
@@ -389,7 +463,7 @@ function jfnk = JFNK(residual,preconditioner)
         end
         
         dx = Z(:,1:k) * yk  ;   % Calculate full Newton update
-        dx = pc.apply(dx)   ;
+        dx = preconditioner.apply(dx)   ;
     end
 end
 

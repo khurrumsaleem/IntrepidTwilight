@@ -1,100 +1,75 @@
-function sim = Simulation(problem)
-    
-    %   Build semidiscretization
-    problem.semidiscretization.closure =...
-        IntrepidTwilight.executive.build('semidiscretization',problem);
-    sim.f = problem.semidiscretization.closure ;
-    
-    %   Build time stepper
-    problem.timeStepper.closure = IntrepidTwilight.executive.build('timestepper',problem);
-    sim.ts = problem.timeStepper.closure;
-    
-    
-    %   Build residual
-    sim.r = IntrepidTwilight.executive.build('residual',problem);
-    
-    
-    %   Build solver and preconditioner
-    sim.solver = IntrepidTwilight.executive.build('solver',problem) ;
-    sim.pc     = sim.solver.preconditioner                          ;
-    
-    
+function simulation = Simulation(solver,residual)
+
     %   Add the finalized problem and other fields
-    sim.problem = problem;
-    sim.run     = @(timeSpan,saveRate,dt) run(timeSpan,saveRate,dt);
-    sim.getData = @() getRunData();
+    simulation.time.span         = [0,1];
+    simulation.time.step.maximum = 1    ;
+    simulation.time.step.minimum = 0    ;
+    simulation.initialCondition  = 0    ;
+    simulation.saveRate          = 1    ;
+    
+    simulation.problem = problem;
+    simulation.run     = @(timeSpan,saveRate,dt) run(timeSpan,saveRate,dt);
+    simulation.getData = @() getRunData();
     
     %   Initialize closure variables
-    tSave = 0;
-    qSave = 0;
+    times  = 0;
+    values = 0;
     
     
-    function [] = run(timeSpan,dt,saveRate)
+    function [] = run(dt)
         
-        tStart  = timeSpan(1);
-        tFinish = timeSpan(2);
-        t       = tStart     ;
+        %   Create time save vector
+        tStart   = simulation.time.span(1)  ;
+        tFinish  = simulation.time.span(2)  ;
+        saveRate = simulation.saveRate      ;
+        t        = tStart                   ;
         
-        %   Times of saved data
-        tSave = (tStart:saveRate:tFinish)';
-        if (tSave ~= tFinish)
-            tSave = [tSave ; tFinish];
+        times = (tStart:saveRate:tFinish)';
+        if (times ~= tFinish)
+            times = [times ; tFinish];
         end
         
         
         %   Initialize data
-        qSave(problem.miscellaneous.nEq,numel(tSave)) = 0   ;
-        qSave(:,1) = problem.initialState.q0                ;
-        q          = qSave(:,1)                             ;
-        
-        %   Initialize preconditioner
-        sim.solver.preconditioner = sim.pc(dt);
-        sim.f.updateTime(tStart);
+        values = simulation.initialCondition(:,ones(1,numel(times)));
+        value  = values(:,1);
         
         %   Save index
         k = 2;
         
-        while ( k <= numel(tSave) )
+        while ( k <= numel(times) )
             
-            if     ( abs((t+dt) - tSave(k)) > eps() )
+            %    Adjust time step to coincide with write times
+            if     ( abs((t+dt) - times(k)) > eps() )
                 step     = dt       ;
                 saveData = false()  ;
-            elseif ( abs((t+dt) - tSave(k)) < eps() )
+            elseif ( abs((t+dt) - times(k)) < eps() )
                 step     = dt   ;
                 saveData = true ;
             else
-                step     = tSave(k) - t ;
+                step     = times(k) - t ;
                 saveData = true         ;
-            end
+            end           
 
-            
-            %   Calculate next time value
-            sim.solver.preconditioner = sim.pc(step);
-           
 
-            %   Show condition number
-%             Show(...
-%                 IntrepidTwilight.ConvenientMeans.conditionNumberMaximum(...
-%                     sim.solver.preconditioner.get(),1));
 
+            %   Update time
             t = t + step;
-            sim.f.updateTime(t);
-            [q,stats] = IntrepidTwilight.TenaciousReduction.JFNK(...
-                q+1E-3*step*sim.f.rhs(q)  ,  sim.r(step)  ,  sim.solver);
-%             sim.ts.qUpdate(q);
-
+            residual.update(value,t,dt);
             
+            %   Solve
+            [value,stats] = solver.solve(value);
+
+
+
+            %   Store
             if saveData
-                qSave(:,k) = q;
+                values(:,k) = q;
                 k          = k + 1;
             end
 
-            sim.ts.qUpdate(q);
+            %   Print statistics
             fprintf('%5.2E seconds: %3G iterations, %5.2E residual\n',t,stats.iterations,stats.norm(end));
-            
-            if abs(t - 7.0E-1) < 10*eps()
-                g = [];
-            end
             
             
         end
@@ -102,8 +77,8 @@ function sim = Simulation(problem)
     end
     
     function [t,q] = getRunData()
-        t = tSave;
-        q = qSave;
+        t = times;
+        q = values;
     end
     
     
