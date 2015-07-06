@@ -4,7 +4,7 @@ function jfnk = JFNK(residual,preconditioner,guard)
     jfnk.tolernace.residual       = 1E-7   ;
     jfnk.tolernace.stepSize       = 1E-7   ;
     jfnk.maximumIterations        = 100    ;
-    jfnk.gmres.iteration.restarts = 1      ;
+    jfnk.gmres.iteration.restarts =  1     ;
     jfnk.gmres.iteration.maximum  = -1     ;
     jfnk.gmres.tolerance          = 1E-10  ;
     jfnk.gmres.nu                 = 0.20   ;
@@ -12,7 +12,7 @@ function jfnk = JFNK(residual,preconditioner,guard)
     
     
     
-    %   Declare containers for cell inputs (defined in set)
+    %   Declare containers for cell inputs (defined in jfnk.set)
     guards          = 0;
     residuals       = 0;
     preconditioners = 0;
@@ -34,7 +34,12 @@ function jfnk = JFNK(residual,preconditioner,guard)
     %   Public methods
     jfnk.allocateWorkArrays = @(x) allocateWorkArrays(x)        ;
     jfnk.set                = @(type,object) set(type,object)   ;
-    jfnk.solve              = @(x) solve(x)                     ;
+    
+    if iscell(residual)
+        jfnk.solve = @(x) solveSegregated(x);
+    else
+        jfnk.solve = @(x) solveCoupled(x)   ;
+    end
 
 
 
@@ -101,20 +106,6 @@ function jfnk = JFNK(residual,preconditioner,guard)
     end
 
 
-    
-    
-    % ================================================================= %
-    %                      Wrapper Solve Function                       %
-    % ================================================================= %
-    function [xNL,stats] = solve(xNL)
-        if iscell(xNL)
-            [xNL,stats] = solveSegregated(xNL);
-        else
-            [xNL,stats] = solveCoupled(xNL);
-        end
-    end
-
-
 
 
 
@@ -148,8 +139,8 @@ function jfnk = JFNK(residual,preconditioner,guard)
             Show(rNLnorm);
             
             %   Iteration clean-up
-            normNotDone           =     rNLnorm      >  jfnk.tolerance.residual             ;
-            stepNotDone           =      dxNorm      >  jfnk.tolerance.stepSize             ;
+            normNotDone           =     rNLnorm      >= jfnk.tolerance.residual             ;
+            stepNotDone           =      dxNorm      >= jfnk.tolerance.stepSize             ;
             belowIterationMaximum = stats.iterations <= jfnk.iterationMaximum               ;
             notConverged          = (normNotDone || stepNotDone) && belowIterationMaximum   ;
 
@@ -216,8 +207,8 @@ function jfnk = JFNK(residual,preconditioner,guard)
             end
             
             %   Iteration clean-up
-            normNotDone           = all(       rNLnorm       >  jfnk.tolerance.residual)    ;
-            stepNotDone           = all(        dxNorm       >  jfnk.tolerance.stepSize)    ;
+            normNotDone           = all(       rNLnorm       >= jfnk.tolerance.residual)    ;
+            stepNotDone           = all(        dxNorm       >= jfnk.tolerance.stepSize)    ;
             belowIterationMaximum =      stats(1).iterations <= jfnk.iterationMaximum       ;
             notConverged          = (normNotDone || stepNotDone) && belowIterationMaximum   ;
             
@@ -303,10 +294,10 @@ function jfnk = JFNK(residual,preconditioner,guard)
         
         if notReduced || hasNans
             
-            %   If full step didn't reduce rssidual or produced NaNs, 
+            %   If full step didn't reduce rssidual or produced NaNs,
             %   search for a better, smaller step.
             alphaMin = ...
-                IntrepidTwilight.ConvenientMeans.goldenSectionSearch(...
+                IntrepidTwilight.ConvenientMeans.goldenSectionMinimizeLazily(...
                 @(alpha) norm(residual(xOld - alpha*dx),2),[0,1],[rOldNorm,rNewNorm],0.01);
             rNew     = residual(xOld - alphaMin*dx);
             rNewNorm = norm(rNew,2)         ;

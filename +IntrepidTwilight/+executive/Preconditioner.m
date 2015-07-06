@@ -50,7 +50,7 @@ function pc = Preconditioner(residual,type)
 
 
     % ======================================================================= %
-    %                         Staganat Full functions                         %
+    %                         Stagnanat Full functions                        %
     % ======================================================================= %
     function u = applyFullJacobian(q)
         u = drdq \ q;
