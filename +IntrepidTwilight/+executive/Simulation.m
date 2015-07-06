@@ -7,7 +7,6 @@ function simulation = Simulation(solver,residual)
     simulation.initialCondition  = 0    ;
     simulation.saveRate          = 1    ;
     
-    simulation.problem = problem;
     simulation.run     = @(timeSpan,saveRate,dt) run(timeSpan,saveRate,dt);
     simulation.getData = @() getRunData();
     

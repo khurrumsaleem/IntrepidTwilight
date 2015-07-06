@@ -1,12 +1,13 @@
 function q2Dup = Quasi2DUpwind(model)
     
     % Return closure
-    q2Dup.rhs                   = @(q)    rhs(q)                ;
-    q2Dup.rhsMass               = @(rho)  rhsMass (rho)         ;
-    q2Dup.rhsEnergy             = @(rhoe) rhsEnergy(rhoe)       ;
-    q2Dup.rhsMomentum           = @(rhov) rhsMomentum(rhov)     ;
-    q2Dup.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
-    q2Dup.update                = @(time) update(time)          ;
+    q2Dup.is                    = @(s) strmpci(s,'spaceDiscretization') ;
+    q2Dup.rhs                   = @(q)    rhs(q)                        ;
+    q2Dup.rhsMass               = @(rho)  rhsMass (rho)                 ;
+    q2Dup.rhsEnergy             = @(rhoe) rhsEnergy(rhoe)               ;
+    q2Dup.rhsMomentum           = @(rhov) rhsMomentum(rhov)             ;
+    q2Dup.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q)         ;
+    q2Dup.update                = @(time) update(time)                  ;
     
     
     

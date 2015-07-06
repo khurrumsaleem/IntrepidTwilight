@@ -1,22 +1,42 @@
 function ts = SimpleTemporalDiscretization(spatialDiscretization)
 
     %   Local properties
-    qLast  = 0                      ;
-    dt     = 0                      ;
-    sd     = spatialDiscretization  ;
+    qLast = 0   ;
+    dt    = 0   ;
+    sd    = 0   ;
+    
+
+    %   Bind at construction if passed
+    if (nargin >= 1)
+        sd = spatialDiscretization ;
+    end
 
     %   Methods
-    ts.qStar                 = @(q) qStar(q)                ;
-    ts.qUpdate               = @(q,t,dt) update(q,t,dt)     ;
-    ts.qLast                 = @() getQLast()               ;
-    ts.qStore                = @() getQStore()              ;
-    ts.jacobian              = @(q) jacobian(q)             ;
-    ts.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q);
+    ts.is                    = @(s) strcmpi(s,'timediscretization') ;
+    ts.set                   = @(type,object) set(type,object)      ;
+    ts.qStar                 = @(q) qStar(q)                        ;
+    ts.qUpdate               = @(q,t,dt) update(q,t,dt)             ;
+    ts.qLast                 = @() getQLast()                       ;
+    ts.qStore                = @() getQStore()                      ;
+    ts.jacobian              = @(q) jacobian(q)                     ;
+    ts.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q)        ;
 
 
-    %   Imbalance function
+    %   Imbalance value
     function value = qStar(q)
         value = qLast + dt * sd.rhs(q);
+    end
+
+
+
+    %   Late bind
+    function [] = set(type,object)
+        switch(lower(type))
+            case('spacediscretization')
+                if object.is('spacediscretization')
+                    sd = object;
+                end
+        end
     end
 
 

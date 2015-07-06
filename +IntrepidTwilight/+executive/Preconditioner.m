@@ -1,37 +1,70 @@
-function pc = Preconditioner(residual,type)
+function pc = Preconditioner(residual,kind)
     
-    r    = residual ;
-    drdq = []       ;
+    %   Closure variables
+    r    = []   ;
+    drdq = []   ;
     
     
-    switch(lower(type))
-
-        case('full-stagnant')
-
-            pc = struct(...
-                'apply'      , @(q) applyFullJacobian(q)        ,...
-                'initialize' , @(q) initializeFullJacobian(q)   ,...
-                'update'     , @(q) []                          ,...
-                'get'        , @() get()                        );
-
-        case('block-jacobi')
-
-            pc = struct(...
-                'apply'      , @(q) applyBlockJacobi(q)     ,...
-                'initialize' , @(q) updateBlockJacobi(q)    ,...
-                'update'     , @(q) updateBlockJacobi(q)    ,...
-                'get'        , @() get()                    );
-
-        case('none')
-
-            pc = struct(...
-                'apply'      , @(q) q    ,...
-                'initialize' , @(q) q    ,...
-                'update'     , @(q) []   ,...
-                'get'        , @()  []   );
-
+    %   Instantiate struct
+    pc.is   = @(s) strcmpi(s,'preconditioner')  ;
+    pc.get  = @()  get()                        ;
+    pc.set  = @(type,object) set(type,object)   ;
+    
+    
+    %   Bind at construction
+    if (nargin >= 1)
+        r = residual;
+    end
+    if (nargin >= 2) && not(isempty(kind))
+        bindMethods();
     end
     
+    
+    
+    function [] = bindMethods()
+        
+        if r.is('residual')
+            switch(lower(kind))
+                
+                case('full-stagnant')
+                    pc.apply      = @(q) applyFullJacobian(q)        ;
+                    pc.initialize = @(q) initializeFullJacobian(q)   ;
+                    pc.update     = @(q) []                          ;
+                    
+                    
+                case('block-jacobi')
+                    pc.apply      = @(q) applyBlockJacobi(q)     ;
+                    pc.initialize = @(q) updateBlockJacobi(q)    ;
+                    pc.update     = @(q) updateBlockJacobi(q)    ;
+                    
+                    
+                case('none')
+                    pc.apply      = @(q) q   ;
+                    pc.initialize = @(q) []  ;
+                    pc.update     = @(q) []  ;
+                    
+            end
+        end
+    end
+    
+    % ======================================================================= %
+    %                                Re-binders                               %
+    % ======================================================================= %
+    function [] = set(type,object)
+        switch(lower(type))
+            case('residual')
+                if r.is('residual')
+                    r = object;
+                end
+
+            case('kind')
+                kind = object;
+                bindMethods();
+        end
+    end
+    function j = get()
+        j = drdq;
+    end
     
     
     % ======================================================================= %
@@ -43,12 +76,9 @@ function pc = Preconditioner(residual,type)
     function [] = updateBlockJacobi(q)
         drdq = r.blockDiagonalJacobian(q);
     end
-    function j = get()
-        j = drdq;
-    end
-
-
-
+    
+    
+    
     % ======================================================================= %
     %                         Stagnanat Full functions                        %
     % ======================================================================= %
