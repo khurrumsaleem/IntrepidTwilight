@@ -53,7 +53,7 @@ function pc = Preconditioner(residual,kind)
     function [] = set(type,object)
         switch(lower(type))
             case('residual')
-                if r.is('residual')
+                if object.is('residual')
                     r = object;
                 end
 

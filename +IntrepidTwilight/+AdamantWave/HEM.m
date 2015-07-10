@@ -32,6 +32,15 @@ function hem = HEM()
         %   Build spatial discretization
         spacediscretization = buildComponent('AdamantWave',hem.discretization.space,hem.model);
         
+        
+        switch(lower(hem.solver.scheme))
+            case('segregated')
+            case('coupled')
+            otherwise
+        end
+
+
+
         %   Build temporal discretization
         timediscretization = buildComponent('TransientStride',hem.discretization.time,spacediscretization);
         

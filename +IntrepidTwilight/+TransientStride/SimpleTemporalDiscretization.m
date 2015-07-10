@@ -33,7 +33,7 @@ function ts = SimpleTemporalDiscretization(spatialDiscretization)
     function [] = set(type,object)
         switch(lower(type))
             case('spacediscretization')
-                if object.is('spacediscretization')
+                if isstruct(object) && object.is('spacediscretization')
                     sd = object;
                 end
         end

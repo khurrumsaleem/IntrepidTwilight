@@ -1,7 +1,7 @@
 function q2Dup = Quasi2DUpwind(model)
     
     % Return closure
-    q2Dup.is                    = @(s) strmpci(s,'spaceDiscretization') ;
+    q2Dup.is                    = @(s) strcmpi(s,'spaceDiscretization') ;
     q2Dup.rhs                   = @(q)    rhs(q)                        ;
     q2Dup.rhsMass               = @(rho)  rhsMass (rho)                 ;
     q2Dup.rhsEnergy             = @(rhoe) rhsEnergy(rhoe)               ;
