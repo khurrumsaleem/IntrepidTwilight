@@ -8,24 +8,29 @@ s2 = sqrt(2);
 
 
 %  12 control volumes
-hem.model.momentumCell.from = (1:12)';
-hem.model.momentumCell.to   = [2:12,1]';
+hem.modelValue('momentumCell','from', (1:12)');
+hem.modelValue('momentumCell','to'  , [2:12,1]');
 %
 %   Flow direction
 
-hem.model.momentumCell.directionX = [+0;+0;+0;+0;+1;+1;+0;+0;+0;+0;-1;-1];
-hem.model.momentumCell.directionY = [-1;-1;-1;-1;+0;+0;+1;+1;+1;+1;+0;+0];
+hem.modelValue('momentumCell','directionX',[+0;+0;+0;+0;+1;+1;+0;+0;+0;+0;-1;-1]);
+hem.modelValue('momentumCell','directionY',[-1;-1;-1;-1;+0;+0;+1;+1;+1;+1;+0;+0]);
 %
 %   Interfaces
-hem.model.interface.volumeUp       = (1:12)'  ;
-hem.model.interface.volumeDown     = [2:12,1]';
-hem.model.interface.normalX        = [+0, +0, +0, +r2, +1, +r2, +0, +0, +0, -r2, -1, -r2]';
-hem.model.interface.normalY        = [-1, -1, -1, -r2, +0, +r2, +1, +1, +1, +r2, +0, -r2]';
-hem.model.interface.surfaceArea    = [+1, +1, +1, +s2, +1, +s2, +1, +1, +1, +s2, +1, +s2]';
-hem.model.momentumCell.volumeBack  = ones(12,1)/2;
-hem.model.momentumCell.volumeFront = ones(12,1)/2;
-hem.model.momentumCell.LoD         = 1;
+hem.modelValue('interface','up', (1:12)'  );
+hem.modelValue('interface','down', [2:12,1]');
+hem.modelValue('interface','normalX', [+0, +0, +0, +r2, +1, +r2, +0, +0, +0, -r2, -1, -r2]');
+hem.modelValue('interface','normalY', [-1, -1, -1, -r2, +0, +r2, +1, +1, +1, +r2, +0, -r2]');
+hem.modelValue('interface','flowArea', [+1, +1, +1, +s2, +1, +s2, +1, +1, +1, +s2, +1, +s2]');
+hem.modelValue('momentumCell','volumeFrom', ones(12,1)/2);
+hem.modelValue('momentumCell','volumeTo', ones(12,1)/2);
+hem.modelValue('momentumCell','LoD', 1);
+hem.modelValue('momentumCell','source','friction',0.1);
 
+%   Sources
+hem.modelValue('controlVolume','source','mass'   , @(varargin) 0);
+hem.modelValue('controlVolume','source','energy' , @(varargin) 0);
+hem.modelValue('momentumCell','source','momentum', @(varargin) 0);
 
 % problem.miscellaneous.nCV      = max([problem.geometry.from;problem.geometry.to]);
 % problem.miscellaneous.nMC      = length(problem.geometry.from);
@@ -44,48 +49,47 @@ e0   = 1.125536123942350e+05;
 v0   = 1E-5;
 rhoe0 = rho0 * e0;
 rhov0 = rho0 * v0;
-onesCV = ones(problem.miscellaneous.nCV,1) ;
-onesMC = ones(problem.miscellaneous.nMC,1) ;
 
-hem.model.controlVolume.volume     = ones(12,1)                             ;
-hem.model.controlVolume.mass       = rho0 * hem.model.controlVolume.volume  ;
-hem.model.controlVolume.energy     = e0   * hem.model.controlVolume.volume  ;
-hem.model.momentumCell.momentum    = v0   * hem.model.controlVolume.volume  ;
-hem.model.momentumCell.momentum(1) = 10 * hem.mode.momentumCell.momentum(1) ;
+volume      = ones(12,1)        ;
+mass        = rho0  * ones(12,1);
+energy      = rhoe0 * ones(12,1);
+momentum    = rhov0 * ones(12,1);
+momentum(1) = 10*momentum(1)  	;
+hem.modelValue('controlVolume','volume' , ones(12,1));
+hem.modelValue('controlVolume','mass'   , mass      );
+hem.modelValue('controlVolume','energy' , energy    );
+hem.modelValue('momentumCell','momentum', momentum  );
 
-problem.dimensionalizer.rho  = rho0    ;
-problem.dimensionalizer.rhoe = rhoe0   ;
-problem.dimensionalizer.rhov = rhov0   ;
+% hem.modelValue('dimensionalizer','mass')     = rho0 ;
+% hem.modelValue('dimensionalizer','energy')   = rhoe0;
+% hem.modelValue('dimensionalizer','momentum') = rhov0;
 
-problem.miscellaneous.iRho  = (1:problem.miscellaneous.nCV)';
-problem.miscellaneous.iRhoe = problem.miscellaneous.nCV+ problem.miscellaneous.iRho ;
-problem.miscellaneous.iRhov = 2*problem.miscellaneous.nCV + (1:problem.miscellaneous.nMC)';
+hem.build();
 
+hem.evolverValue('time','span'          , [0,2]                 )   ;
+hem.evolverValue('time','step','maximum', 1                     )   ;
+hem.evolverValue('time','step','minimum', 1E-7                  )   ;
+hem.evolverValue('time','step','goal'   , 0.1                   )   ;
+hem.evolverValue('initialCondition'     , {momentum;[mass;energy]})   ;
+hem.evolverValue('saveRate'             , 0.1                   )   ;
 
-% Thermodynamic properites
-problem.initialState.e = problem.initialState.rhoe0 ./ problem.initialState.rho0     ;
-problem.initialState.T = Temperature(problem.initialState.rho0,problem.initialState.e);
-problem.initialState.P = Pressure(problem.initialState.rho0,problem.initialState.T)   ;
-
-problem.miscellaneous.epsilon = 1E-8;
-
-
+hem.evolve();
 
 %   Method choices
-problem.semidiscretization.name         = 'Quasi2DUpwind'   ;
-problem.timeStepper.name                = 'implicitEuler'   ;
-problem.timeStepper.stepSize            = 0.2               ;
-problem.solver.name                     = 'JFNK'            ;
+% problem.semidiscretization.name         = 'Quasi2DUpwind'   ;
+% problem.timeStepper.name                = 'implicitEuler'   ;
+% problem.timeStepper.stepSize            = 0.2               ;
+% problem.solver.name                     = 'JFNK'            ;
 % problem.solver.preconditioner.type      = 'none'            ;
-problem.solver.preconditioner.type      = 'block-jacobi'    ;
+% problem.solver.preconditioner.type      = 'block-jacobi'    ;
 % problem.solver.preconditioner.type      = 'full-stagnant'   ;
-problem.solver.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
+% problem.solver.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
 
 
-qHi = [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC];
-qLo = [1E-5*onesCV;-Inf*onesCV;-Inf*onesMC];
-problem.solver.guard.value = @(q)    guardValue(q,qLo,qHi,problem);
-problem.solver.guard.step  = @(q,dq) guardStep(q,dq,qLo,qHi,problem);
+% qHi = [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC];
+% qLo = [1E-5*onesCV;-Inf*onesCV;-Inf*onesMC];
+% problem.solver.guard.value = @(q)    guardValue(q,qLo,qHi,problem);
+% problem.solver.guard.step  = @(q,dq) guardStep(q,dq,qLo,qHi,problem);
 
 % tic;
 % simulation.run([0,1],0.01,0.1);

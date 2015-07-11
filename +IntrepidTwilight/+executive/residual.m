@@ -29,7 +29,7 @@ function r = Residual(timeDiscretization)
 
     %   Residual value
     function r = value(q)
-        r = q - ts.qStar();
+        r = q - ts.qStar(q);
     end
 
 

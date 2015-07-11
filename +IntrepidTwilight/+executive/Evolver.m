@@ -3,12 +3,12 @@ function evolver = Evolver(Solver,Residual)
     
     %   Bind at construction
     if (nargin >= 1) && not(isempty(Solver))
-        set('solver',Solver);
+        bind('solver',Solver);
     else
         solver = 0;
     end
     if (nargin >= 2) && not(isempty(Residual))
-        set('residual',Residual);
+        bind('residual',Residual);
     else
         residual = 0;
     end
@@ -20,10 +20,12 @@ function evolver = Evolver(Solver,Residual)
     evolver.time.step.minimum = 0    ;
     evolver.time.step.goal    = 0.1  ;
     evolver.initialCondition  = 0    ;
-    evolver.saveRate          = 1    ;
+    evolver.saveRate          = 0.1  ;
     
-    evolver.set     = @(type,object) set(type,object);
-    evolver.run     = @() run();
+    evolver.bind    = @(type,object) bind(type,object);
+    evolver.set     = @(varargin) set(varargin{:});
+    evolver.run     = @() evolve();
+    evolver.evolve  = @() evolve();
     evolver.getData = @() getRunData();
     
     %   Initialize closure variables
@@ -31,7 +33,7 @@ function evolver = Evolver(Solver,Residual)
     values = 0;
     
     
-    function [] = run()
+    function [] = evolve()
         
         %   Create time save vector
         tStart   = evolver.time.span(1)     ;
@@ -98,10 +100,13 @@ function evolver = Evolver(Solver,Residual)
     end
     
     
+    function [] = set(varargin)
+        evolver = setfield(evolver,varargin{:});
+    end
     
     
     %   Late binder
-    function [] = set(type,object)
+    function [] = bind(type,object)
         switch(lower(type))
             case('residual')
                 if object.is('residual')

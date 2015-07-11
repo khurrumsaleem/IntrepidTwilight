@@ -1,9 +1,10 @@
 function jfnk = JFNK(residual,preconditioner)
     
     %   Default parameters
-    jfnk.tolernace.residual       = 1E-7   ;
-    jfnk.tolernace.stepSize       = 1E-7   ;
+    jfnk.tolerance.residual       = 1E-7   ;
+    jfnk.tolerance.stepSize       = 1E-7   ;
     jfnk.maximumIterations        = 100    ;
+    jfnk.epsilon                  = 1E-7   ;
     jfnk.gmres.iteration.restarts =  1     ;
     jfnk.gmres.iteration.maximum  = -1     ;
     jfnk.gmres.tolerance          = 1E-10  ;
@@ -12,9 +13,7 @@ function jfnk = JFNK(residual,preconditioner)
     
     
     %   Containers for object arrays
-    residuals       = 0 ;
-    preconditioners = 0 ;
-    
+    block = 1;
     
     %   Bind on construction if passed
     if (nargin >= 1) && isstruct(residual)
@@ -57,7 +56,7 @@ function jfnk = JFNK(residual,preconditioner)
         end
         
         %   Determine column count
-        if (jfnk.gmres.iteration.iteration.maximum == -1)
+        if (jfnk.gmres.iteration.maximum == -1)
             nCols                        = nRows;
             jfnk.gmres.iteration.maximum = nCols;
         else
@@ -85,28 +84,18 @@ function jfnk = JFNK(residual,preconditioner)
     function [] = set(type,object)
         switch(lower(type))
             case('residual')
-                if object.is('residual')
-                    if numel(residual) == 1
-                        residual = object;
-                    else
-                        residual  = object(1)   ;
-                        residuals = object      ;
-                    end
+                if object(1).is('residual')
+                    residual = object;
                 end
                 
             case('preconditioner')
-                if object.is('preconditioner')
-                    if numel(preconditioner) == 1
-                        preconditioner = object;
-                    else
-                        preconditioner  = object(1) ;
-                        preconditioners = object    ;
-                    end
+                if object(1).is('preconditioner')
+                    preconditioner = object;
                 end
         end
     end
     function [] = bindSolver()
-        if isstruct(residual) && residual.is('residual')
+        if isstruct(residual) && residual(1).is('residual')
             if numel(residual) == 1
                 jfnk.solve = @(x) solveCoupled(x)   ;
             else
@@ -129,7 +118,6 @@ function jfnk = JFNK(residual,preconditioner)
         if arraysAreNotAllocated
             allocateWorkArrays(xNL);
         end
-        
         
         % ----------------------------------------------- %
         %                Non-Linear Iterations            %
@@ -183,17 +171,18 @@ function jfnk = JFNK(residual,preconditioner)
         % ----------------------------------------------- %
         
         %   Allocate
-        n                     = numel(xNL)  ;
-        rNL{n,1}              = 0           ;
-        rNLnorm(n,1)          = 0           ;
-        dxNorm(n,1)           = 0           ;
-        stats(n,1).iterations = 0           ;
+        n                                 = numel(xNL)   ;
+        rNL{n,1}                          = 0            ;
+        rNLnorm(n,jfnk.maximumIterations) = 0            ;
+        dxNorm(n,1)                       = 0            ;
+        iteration                         = 1            ;
         
         %   Initialize
         for k = 1:n
-            [rNL{k},rNLnorm(k),stats(k)] = initialize(xNL{k});
+            block = k;
+            [rNL{k},rNLnorm(k,iteration)] = initialize(xNL{k});
         end
-        notConverged = all(rNLnorm > jfnk.tolerance.residual);
+        notConverged = all(rNLnorm(:,iteration) > jfnk.tolerance.residual);
         
         
         %   Iterate
@@ -201,32 +190,30 @@ function jfnk = JFNK(residual,preconditioner)
             
             for k = 1:n
                 
-                %   Assign this block's objects
-                residual       = residuals(k)       ;
-                preconditioner = preconditioners(k) ;
-                
+                %   Update block index
+                block = k;
                 
                 %   Take a step
-                [xNL{k},rNL{k},dxNorm(k),rNLnorm(k),stats(k)] = ...
-                    nonlinearStep(xNL{k},rNL{k},rNLnorm(k),stats(k));
+                [xNL{k},rNL{k},dxNorm(k),rNLnorm(k,iteration+1)] = ...
+                    nonlinearStep(xNL{k},rNL{k},rNLnorm(k,iteration));
                 
                 %   Display run-time stuff
                 fprintf('Block %d:\n\t',k);
-                Show(rNLnorm{k});
+                Show(rNLnorm(k,iteration+1));
             end
             
             %   Iteration clean-up
-            normNotDone           = all(       rNLnorm       >= jfnk.tolerance.residual)    ;
-            stepNotDone           = all(        dxNorm       >= jfnk.tolerance.stepSize)    ;
-            belowIterationMaximum =      stats(1).iterations <= jfnk.iterationMaximum       ;
+            iteration            = iteration + 1                                            ;
+            normNotDone           = all( rNLnorm(:,iteration) >= jfnk.tolerance.residual)   ;
+            stepNotDone           = all(       dxNorm         >= jfnk.tolerance.stepSize)   ;
+            belowIterationMaximum =           iteration       <= jfnk.iterationMaximum      ;
             notConverged          = (normNotDone || stepNotDone) && belowIterationMaximum   ;
             
         end
         
         %   Contract vector to the number of actuall iterations
-        for k = 1:n
-            stats(k).rNorm = stats(k).rNorm(1:stats(k).iterations);
-        end
+        stats.rNorm     = rNorm(1:iteration);
+        stats.iteration = iteration         ;
         
     end
     
@@ -239,25 +226,20 @@ function jfnk = JFNK(residual,preconditioner)
     % ================================================================= %
     
     
-    function [rNL,rNLnorm,stats] = initialize(xNL)
+    function [rNL,rNLnorm] = initialize(xNL)
         
         %   Guard against the initial value
-        [rNL,xNL] = residual.guard.state(xNL);
+        [rNL,xNL] = residual(block).guard.state(xNL);
         
         %   Initialization
-        rNLnorm = norm(rNL,2)           ;
-        preconditioner.initialize(xNL)  ;
-        
-        % Counter and residual
-        stats.rNorm(jfnk.iterationMaximum,1) = 0        ;
-        stats.rNorm(1)                       = rNLnorm  ;
-        stats.iterations                     = 1        ;
+        rNLnorm = norm(rNL,2)                   ;
+        preconditioner(block).initialize(xNL)   ;
         
     end
     
     
     
-    function [xNL,rNL,rNLnorm,dxNorm,params] = nonlinearStep(xNLm1,rNLm1,rNLnorm,params)
+    function [xNL,rNL,rNLnorm,dxNorm] = nonlinearStep(xNLm1,rNLm1,rNLnorm)
         
         %   Advance in a descent direction
         [xNL,rNL,rNLnorm,dxNorm] = quasiNewtonUpdate(xNLm1,rNLm1,rNLnorm);
@@ -266,7 +248,7 @@ function jfnk = JFNK(residual,preconditioner)
         %   Extrapolate solution
         dxExtrap    = rNL .* (xNL - xNLm1)./(rNL - rNLm1);
         xExtrap     = xNL - dxExtrap            ;
-        rExtrap     = residual.value(xExtrap)   ;
+        rExtrap     = residual(block).value(xExtrap)   ;
         rExtrapNorm = norm(rExtrap,2)           ;
         if rExtrapNorm < 0.9*rNLnorm
             xNL     = xExtrap       ;
@@ -275,12 +257,9 @@ function jfnk = JFNK(residual,preconditioner)
         end
         
         %   Update preconditions
-        preconditioner.update(xNL);
+        preconditioner(block).update(xNL);
         Show(rNLnorm);
-        
-        %   Iteration clean-up
-        params.iterations  = params.iterations + 1  ;
-        params.rNorm(iter) = rNLnorm                ;
+
     end
     
     
@@ -291,21 +270,22 @@ function jfnk = JFNK(residual,preconditioner)
         dx = GMRES(xOld,rOld,rOldNorm);
         
         %   Relax the step size to the gaurded value
-        [rNew,dx] = residual.guard.step(xOld,dx);
+        [rNew,dx] = residual(block).guard.step(xOld,dx);
         
         %   Set-up
         rNewNorm   = norm(rNew,2)               ;
         notReduced = rNewNorm > rOldNorm        ;
-
-
+        
+        
         if notReduced
             
             %   If full step didn't reduce rssidual or produced NaNs,
             %   search for a better, smaller step.
             alphaMin = ...
                 IntrepidTwilight.ConvenientMeans.goldenSectionMinimizeLazily(...
-                @(alpha) norm(residual.value(xOld - alpha*dx),2),[0,1],[rOldNorm,rNewNorm],0.01);
-            rNew     = residual.value(xOld - alphaMin*dx)   ;
+                    @(alpha) norm(residual(block).value(xOld - alpha*dx),2),...
+                        [0,1],[rOldNorm,rNewNorm],0.01);
+            rNew     = residual(block).value(xOld - alphaMin*dx)   ;
             rNewNorm = norm(rNew,2)                         ;
             dx       = alphaMin*dx                          ;
             
@@ -318,7 +298,7 @@ function jfnk = JFNK(residual,preconditioner)
             rNormTrack = rNewNorm       ;
             while reduced
                 dx         = jfnk.newton.relax.over * dx        ;
-                rNew       = residual.value(xOld - dx)          ;
+                rNew       = residual(block).value(xOld - dx)   ;
                 rNewNorm   = norm(rNew,2)                       ;
                 reduced    = rNewNorm < 0.9*rNormTrack          ;
                 rTrack     = rNew*reduced + rTrack*(1-reduced)  ;
@@ -351,7 +331,7 @@ function jfnk = JFNK(residual,preconditioner)
             xk             = xk + dx                ;
             [dx,rk,rkNorm] = GMRESCore(xk,rk,rkNorm);
             
-            if rkNorm <= jfnk.gmres.tolernace
+            if rkNorm <= jfnk.gmres.tolerance
                 break;
             end
         end
@@ -364,27 +344,29 @@ function jfnk = JFNK(residual,preconditioner)
         nu              = jfnk.gmres.nu         ;
         linearTolerance = jfnk.gmres.tolerance  ;
         epsilon         = jfnk.epsilon          ;
+        n               = numel(xk)             ;
+        I               = 1:n                   ;
         
         
         %   First basis vector for update
-        Z(:,1) = rk0 / rk0Norm ;
+        Z(I,1) = rk0 / rk0Norm ;
         
         % First Step (k = 1)
         % Compute J*z1 and store in R
-        w      = preconditioner.apply(Z(:,1))                       ;
-        R(:,1) = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
+        w      = preconditioner(block).apply(Z(I,1))                       ;
+        R(I,1) = (residual(block).value(xk + epsilon*w) - rk0) / epsilon   ;
         
         % Compute Householder vector to bring R(:,1) into upper triangular form
-        e      = [1 ; Zeros]                        ;
-        h      = R(:,1)                             ;
+        e      = [1 ; Zeros(1:n-1)]                 ;
+        h      = R(I,1)                             ;
         h      = -Signum(h(1)) * norm(h,2) * e - h  ;
-        H(:,1) = h / norm(h,2)                      ;
+        H(I,1) = h / norm(h,2)                      ;
         
         % Apply projection to R to bring it into upper triangular form
-        R(:,1) = R(:,1) - 2 * H(:,1) * (H(:,1)'*R(:,1));
+        R(I,1) = R(I,1) - 2 * H(I,1) * (H(I,1)'*R(I,1));
         
         % Get the first column of the unitary matrix
-        q = e - 2 * H(:,1) * (H(:,1)'*e);
+        q = e - 2 * H(I,1) * (H(I,1)'*e);
         e = e(1:n-1);
         
         % Residual update
@@ -396,22 +378,22 @@ function jfnk = JFNK(residual,preconditioner)
         rkNorm   = norm(rk,2)   ;
         
         
-        for k = 2:nMax
+        for k = 2:jfnk.gmres.iteration.maximum
             
             % Choose the next basis vector
             if rkNorm <= nu*rkm1Norm
-                Z(:,k) = rk/rkNorm  ;   %   GCR (RB-SGMRES) basis
+                Z(I,k) = rk/rkNorm  ;   %   GCR (RB-SGMRES) basis
             else
-                Z(:,k) = q          ;   %   Simpler GMRES basis
+                Z(I,k) = q          ;   %   Simpler GMRES basis
             end
             
             % Compute and store A*zk in R
-            w      = preconditioner.apply(Z(:,k))                       ;
-            R(:,k) = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
+            w      = preconditioner(block).apply(Z(I,k))                ;
+            R(I,k) = (residual(block).value(xk + epsilon*w) - rk0) / epsilon   ;
             
             % Apply all previous projections to new the column
             for m = 1:k-1
-                R(:,k) = R(:,k) - H(:,m)*(2*H(:,m)'*R(:,k));
+                R(I,k) = R(I,k) - H(I,m)*(2*H(I,m)'*R(I,k));
             end
             
             % Get the next Householder vector
@@ -422,13 +404,13 @@ function jfnk = JFNK(residual,preconditioner)
             
             %   Apply projection to R to bring it into upper triangular form;
             for m = 1:k
-                R(:,m) = R(:,m) - 2 * H(:,k) * (H(:,k)'*R(:,m));
+                R(I,m) = R(I,m) - 2 * H(I,k) * (H(I,k)'*R(I,m));
             end
             
             % Get the k-th column of the current unitary matrix
             q = [Zeros(1:k-1) ; e - 2*h*(h'*e)];
             for m = k-1:-1:1
-                q = q - 2*H(:,m)*(H(:,m)'*q);
+                q = q - 2*H(I,m)*(H(I,m)'*q);
             end
             e = e(1:end-1);
             
@@ -459,8 +441,8 @@ function jfnk = JFNK(residual,preconditioner)
             yk = S*yk                   ;
         end
         
-        dx = Z(:,1:k) * yk              ;   % Calculate full Newton update
-        dx = preconditioner.apply(dx)   ;
+        dx = Z(I,1:k) * yk                  ;   % Calculate full Newton update
+        dx = preconditioner(block).apply(dx);
     end
 end
 

@@ -1,10 +1,11 @@
-function q2Dup = Quasi2DUpwind(model)
+function q2Dup = Quasi2DUpwind(model,options)
     
     % Return closure
     q2Dup.is                    = @(s) strcmpi(s,'spaceDiscretization') ;
     q2Dup.rhs                   = @(q)    rhs(q)                        ;
     q2Dup.rhsMass               = @(rho)  rhsMass (rho)                 ;
     q2Dup.rhsEnergy             = @(rhoe) rhsEnergy(rhoe)               ;
+    q2Dup.rhsMassEnergy         = @(qCV)  rhsMassEnergy(qCV)            ;
     q2Dup.rhsMomentum           = @(rhov) rhsMomentum(rhov)             ;
     q2Dup.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q)         ;
     q2Dup.update                = @(time) update(time)                  ;
@@ -16,64 +17,74 @@ function q2Dup = Quasi2DUpwind(model)
     % ======================================================================= %
     
     % Conserved quantities
-    rho  = model.initialState.rho0   ;
-    rhoe = model.initialState.rhoe0  ;
-    rhov = model.initialState.rhov0  ;
+    mass     = model.controlVolume.mass     ;
+    energy   = model.controlVolume.energy   ;
+    volume   = model.controlVolume.volume   ;
+    momentum = model.momentumCell.momentum  ;
     
-    rhoDim  = model.dimensionalizer.rho    ;
-    rhoeDim = model.dimensionalizer.rhoe   ;
-    rhovDim = model.dimensionalizer.rhov   ;
+    %   Dimensionalizers
+    rhoDim  = CriticalDensity()                     ;
+    rhoeDim = DimensioningInternalEnergy * rhoDim   ;
+    rhovDim = rhoDim * momentum(1)                  ;
     
-    % Indices
-    iRho  = model.miscellaneous.iRho  ;
-    iRhov = model.miscellaneous.iRhov ;
-    iRhoe = model.miscellaneous.iRhoe ;
-    from  = model.geometry.from       ;
-    to    = model.geometry.to         ;
-    up    = model.geometry.up         ;
-    down  = model.geometry.down       ;
+    % Control volume sense
+    from  = model.momentumCell.from ;
+    to    = model.momentumCell.to   ; 
+    up    = model.interface.up      ;
+    down  = model.interface.down    ;
     
+    %   Indices
+    nCV   = max([from(:);to(:)]);
+    nMC   = length(from);
+    
+    switch(lower(options.scheme))
+        case('coupled')
+            iRho  = (1:nCV)'        ;
+            iRhoe = nCV + iRho      ;
+            iRhov = 2*nCV + (1:nMC)';
+        case('segregated')
+            iRho  = (1:nCV)'    ;
+            iRhoe = nCV + iRho  ;
+            iRhov = (1:nMC)'    ;
+    end
+
+
     % Volumes of momentum cells
-    volumeBack  = model.geometry.volumeBack       ;
-    volumeFront = model.geometry.volumeFront      ;
+    volumeFrom = model.momentumCell.volumeFrom  ;
+    volumeTo   = model.momentumCell.volumeTo    ;
     
     % Interface parameters
-    Ainter = model.geometry.Ainter   ;
+    Ainter = model.interface.flowArea   ;
     
     % Sources
-    sRho  = model.miscellaneous.sRho  ;
-    sRhoe = model.miscellaneous.sRhoe ;
-    sRhov = model.miscellaneous.sRhov ;
+    sRho  = model.controlVolume.source.mass     ;
+    sRhoe = model.controlVolume.source.energy   ;
+    sRhov = model.momentumCell.source.momentum  ;
     
     % Momentum 
-    friction = model.miscellaneous.friction;
-    LoD      = model.geometry.LoD;
+    friction = model.momentumCell.source.friction   ;
+    LoD      = model.momentumCell.LoD               ;
 
     
     % ======================================================================= %
     %                            Parameter calculating                        %
     % ======================================================================= %
-    
-    % Amounts of stuff
-    nCV    = max([from;to])             ;
-    nMC    = length(from)               ;
-
 
     % Normalized (fractional volume) of momentum cells
-    volTotal     = volumeBack + volumeFront;
-    volumeBack   = volumeBack  ./ volTotal;
-    volumeFront  = volumeFront ./ volTotal;
+    volTotal     = volumeFrom + volumeTo;
+    volumeFrom   = volumeFrom  ./ volTotal;
+    volumeTo  = volumeTo ./ volTotal;
 
 
     % Momentum cell-Interface dots
-    upDotN   =  model.geometry.zx(up)  .*model.geometry.nx  + ...
-                model.geometry.zy(up)  .*model.geometry.ny  ;
-    downDotN =  model.geometry.zx(down).*model.geometry.nx  + ...
-                model.geometry.zy(down).*model.geometry.ny  ;
+    upDotN   =  model.momentumCell.directionX(up)  .*model.interface.normalX    + ...
+                model.momentumCell.directionY(up)  .*model.interface.normalY    ;
+    downDotN =  model.momentumCell.directionX(down).*model.interface.normalX    + ...
+                model.momentumCell.directionY(down).*model.interface.normalY    ;
 
 
     % Gravity
-    theta = atan(model.geometry.zy./model.geometry.zx);
+    theta = atan(model.momentumCell.directionY./model.momentumCell.directionX);
     g     = 9.81*cos(theta + pi/2);
 
 
@@ -83,10 +94,17 @@ function q2Dup = Quasi2DUpwind(model)
 
 
     %   Jacobi finite difference epsilon
-    epsilon  = model.miscellaneous.epsilon;
+    if isfield(options,'epsilon')
+        epsilon  = options.epsilon;
+    else
+        epsilon = 1E-8;
+    end
 
 
     % Initialization for inclusion into the closure environment
+    rho  = mass     ./ volume   ;
+    rhoe = energy   ./ volume   ;
+    rhov = momentum ./ volTotal ;
     rhoBar = 0;
     vCV    = 0;
     vMC    = 0;
@@ -96,13 +114,17 @@ function q2Dup = Quasi2DUpwind(model)
 
     %   Create a Thermodynamic struct TD (used for passing 
     %   already-calculated properties to constituitive relations)
-    TD.e    = rhoe ./ rho                       ;
-    TD.T    = Temperature(rho,TD.e,model.initialState.T);
-    TD.P    = Pressure(rho,TD.T)                ;
-    TD.rhoh = rhoe + TD.P                       ;
+    TD.e    = rhoe ./ rho           ;
+    TD.T    = Temperature(rho,TD.e) ;
+    TD.P    = Pressure(rho,TD.T)    ;
+    TD.rhoh = rhoe + TD.P           ;
 
 
 
+
+    % =================================================== %
+    %                     Full RHS                        %
+    % =================================================== %
     function f = rhs(q)
         
         % Pull conserved values
@@ -118,6 +140,20 @@ function q2Dup = Quasi2DUpwind(model)
         
     end
     
+    function f = rhsMassEnergy(q)
+        
+        % Pull conserved values
+        rho  = q(iRho)  * rhoDim    ;
+        rhoe = q(iRhoe) * rhoeDim   ;
+
+
+        updateClosureEnvironment();
+        
+        
+        f = [rhsMass()/rhoDim;rhsEnergy()/rhoeDim];
+        
+    end
+    
     
     function [] = update(time)
         t = time;
@@ -130,7 +166,7 @@ function q2Dup = Quasi2DUpwind(model)
     
     function [] = updateVelocity()
         % Get average density and CV surface velocities
-        rhoBar    = volumeBack.*rho(from) + volumeFront.*rho(to);
+        rhoBar    = volumeFrom.*rho(from) + volumeTo.*rho(to);
         
         %   Control volume advection
         vCV       = rhov ./ rhoBar;
@@ -164,6 +200,7 @@ function q2Dup = Quasi2DUpwind(model)
         
         if (nargin >= 1)
             rho = rhoStar * rhoDim;
+            updateClosureEnvironment();
         end
         
         % Advection term
@@ -186,6 +223,7 @@ function q2Dup = Quasi2DUpwind(model)
         
         if (nargin >= 1)
             rhoe = rhoeStar * rhoeDim;
+            updateClosureEnvironment();
         end
         
         
@@ -208,6 +246,7 @@ function q2Dup = Quasi2DUpwind(model)
         
         if (nargin >= 1)
             rhov = rhovStar * rhovDim;
+            updateClosureEnvironment();
         end
         
         

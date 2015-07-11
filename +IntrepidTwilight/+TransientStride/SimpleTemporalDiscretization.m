@@ -15,7 +15,7 @@ function ts = SimpleTemporalDiscretization(spatialDiscretization)
     ts.is                    = @(s) strcmpi(s,'timediscretization') ;
     ts.set                   = @(type,object) set(type,object)      ;
     ts.qStar                 = @(q) qStar(q)                        ;
-    ts.qUpdate               = @(q,t,dt) update(q,t,dt)             ;
+    ts.update                = @(q,t,dt) update(q,t,dt)             ;
     ts.qLast                 = @() getQLast()                       ;
     ts.qStore                = @() getQStore()                      ;
     ts.jacobian              = @(q) jacobian(q)                     ;
@@ -48,7 +48,7 @@ function ts = SimpleTemporalDiscretization(spatialDiscretization)
         dt     = step   ;
         
         %   Update spatial discretization's time
-        sd.update(t,step);
+        sd.update(t);
     end
 
 

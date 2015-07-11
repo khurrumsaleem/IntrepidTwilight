@@ -1,4 +1,9 @@
 function model = BasicModel()
+    
+    
+    model.dimensionalizer.mass     = [];
+    model.dimensionalizer.energy   = [];
+    model.dimensionalizer.momentum = [];
 
     
     % ========================================================= %
@@ -35,6 +40,7 @@ function model = BasicModel()
     model.momentumCell.volumeTo        = [];
     model.momentumCell.LoD             = [];
     model.momentumCell.source.momentum = [];
+    model.momentumCell.source.friction = [];
 
 
     %   Interfaces
@@ -43,5 +49,19 @@ function model = BasicModel()
     model.interface.normalX  = [];  %   Surface normal
     model.interface.normalY  = [];  %   Surface normal
     model.interface.flowArea = [];  %   Flow area
-
+    
+    
+    
+    model.set = @(varargin) set(varargin{:});
+    model.get = @(varargin) get(varargin{:});
+    function [] = set(varargin)
+        model = setfield(model,varargin{:});
+    end
+    function value = get(varargin)
+        if (nargin == 0)
+            value = model;
+        else
+            value = getfield(model,varargin{:});
+        end
+    end
 end
