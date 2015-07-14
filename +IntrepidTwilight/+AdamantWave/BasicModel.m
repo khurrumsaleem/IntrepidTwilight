@@ -52,8 +52,12 @@ function model = BasicModel()
     
     
     
-    model.set = @(varargin) set(varargin{:});
-    model.get = @(varargin) get(varargin{:});
+
+    model.type = 'model';
+    model.is   = @(s) strcmpi(s,model.type);
+    model.set  = @(varargin) set(varargin{:});
+    model.get  = @(varargin) get(varargin{:});
+    
     function [] = set(varargin)
         model = setfield(model,varargin{:});
     end

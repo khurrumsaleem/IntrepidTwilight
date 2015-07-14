@@ -6,9 +6,11 @@ function pc = Preconditioner(residual,kind)
     
     
     %   Instantiate struct
-    pc.is   = @(s) strcmpi(s,'preconditioner')  ;
-    pc.get  = @()  get()                        ;
-    pc.set  = @(type,object) set(type,object)   ;
+    pc.type    = 'preconditioner'       ;
+    pc.is      = @(s) strcmpi(s,pc.type);
+    pc.get     = @()  get()             ;
+    pc.bind    = @(object) bind(object) ;
+    pc.setKind = @(s) setKind(s)        ;
     
     
     %   Bind at construction
@@ -50,16 +52,19 @@ function pc = Preconditioner(residual,kind)
     % ======================================================================= %
     %                                Re-binders                               %
     % ======================================================================= %
-    function [] = set(type,object)
-        switch(lower(type))
-            case('residual')
-                if object.is('residual')
-                    r = object;
-                end
-
-            case('kind')
-                kind = object;
-                bindMethods();
+    function [] = bind(object)
+        
+        if isstruct(object)
+            if object(1).is('residual')
+                r = object;
+            end
+        end
+    end
+    function [] = setKind(object)
+        if (nargin >= 1) && ischar(object)
+            kind = object;
+            bindMethods();
+        else
         end
     end
     function j = get()

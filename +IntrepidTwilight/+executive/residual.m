@@ -4,7 +4,7 @@ function r = Residual(timeDiscretization)
 
     %   Bind at construction if passed
     if (nargin >= 1)
-        set('timediscretization',timeDiscretization);
+        bind('timediscretization',timeDiscretization);
     end
 
 
@@ -19,12 +19,13 @@ function r = Residual(timeDiscretization)
 
 
     %   Public methods
-    r.is                    = @(s) strcmpi(s,'residual')        ;
-    r.set                   = @(type,object) set(type,object)   ;
-    r.value                 = @(q) value(q)                     ;
-    r.update                = @(q,t,dt) update(q,t,dt)          ;
-    r.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q)     ;
-    r.jacobian              = @(q) jacobian(q)                  ;
+    r.type                  = 'residual'                    ;
+    r.is                    = @(s) strcmpi(s,r.type)        ;
+    r.bind                  = @(object) bind(object)        ;
+    r.value                 = @(q) value(q)                 ;
+    r.update                = @(q,t,dt) update(q,t,dt)      ;
+    r.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
+    r.jacobian              = @(q) jacobian(q)              ;
 
 
     %   Residual value
@@ -35,12 +36,12 @@ function r = Residual(timeDiscretization)
 
 
     %   Late binder
-    function [] = set(type,object)
-        switch(lower(type))
-            case('timediscretization')
-                if isstruct(object) && object.is('timediscretization')
-                    ts = object;
-                end
+    function [] = bind(object)
+        if isstruct(object)
+            switch(object(1).type)
+                case('timediscretization')
+                        ts = object;
+            end
         end
     end
     

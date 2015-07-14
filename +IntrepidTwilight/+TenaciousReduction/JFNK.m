@@ -17,11 +17,11 @@ function jfnk = JFNK(residual,preconditioner)
     
     %   Bind on construction if passed
     if (nargin >= 1) && isstruct(residual)
-        set('residual',residual);
+        bind('residual',residual);
         bindSolver();
     end
     if (nargin >= 2) && isstruct(preconditioner)
-        set('preconditioner',preconditioner);
+        bind('preconditioner',preconditioner);
     end
     
     
@@ -36,9 +36,10 @@ function jfnk = JFNK(residual,preconditioner)
     
     
     %   Public methods
-    jfnk.allocateWorkArrays = @(x) allocateWorkArrays(x)        ;
-    jfnk.set                = @(type,object) set(type,object)   ;
-    jfnk.is                 = @(s) strcmpi(s,'solver')          ;
+    jfnk.bind = @(object) bind(object)      ;
+    jfnk.type = 'solver'                    ;
+    jfnk.is   = @(s) strcmpi(s,jfnk.type)   ;
+    jfnk.set  = @(varargin) set(varargin{:});
     
     
     
@@ -81,17 +82,15 @@ function jfnk = JFNK(residual,preconditioner)
     % ================================================================= %
     %                       Mutators/Re-binders                         %
     % ================================================================= %
-    function [] = set(type,object)
-        switch(lower(type))
-            case('residual')
-                if object(1).is('residual')
-                    residual = object;
-                end
-                
-            case('preconditioner')
-                if object(1).is('preconditioner')
-                    preconditioner = object;
-                end
+    function [] = bind(object)
+        if isstruct(object)
+            switch(object(1).type)
+                case('residual')
+                        residual = object;
+
+                case('preconditioner')
+                        preconditioner = object;
+            end
         end
     end
     function [] = bindSolver()
@@ -102,6 +101,9 @@ function jfnk = JFNK(residual,preconditioner)
                 jfnk.solve = @(x) solveSegregated(x);
             end
         end
+    end
+    function [] = set(varargin)
+        jfnk = setfield(jfnk,{1},varargin{1:end-1},varargin{end});
     end
     
     

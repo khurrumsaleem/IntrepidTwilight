@@ -12,14 +12,15 @@ function ts = SimpleTemporalDiscretization(spatialDiscretization)
     end
 
     %   Methods
-    ts.is                    = @(s) strcmpi(s,'timediscretization') ;
-    ts.set                   = @(type,object) set(type,object)      ;
-    ts.qStar                 = @(q) qStar(q)                        ;
-    ts.update                = @(q,t,dt) update(q,t,dt)             ;
-    ts.qLast                 = @() getQLast()                       ;
-    ts.qStore                = @() getQStore()                      ;
-    ts.jacobian              = @(q) jacobian(q)                     ;
-    ts.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q)        ;
+    ts.type                  = 'timediscretization'             ;
+    ts.is                    = @(s) strcmpi(s,ts.type)          ;
+    ts.set                   = @(type,object) set(type,object)  ;
+    ts.qStar                 = @(q) qStar(q)                    ;
+    ts.update                = @(q,t,dt) update(q,t,dt)         ;
+    ts.qLast                 = @() getQLast()                   ;
+    ts.qStore                = @() getQStore()                  ;
+    ts.jacobian              = @(q) jacobian(q)                 ;
+    ts.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q)    ;
 
 
     %   Imbalance value

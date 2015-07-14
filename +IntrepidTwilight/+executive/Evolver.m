@@ -106,17 +106,15 @@ function evolver = Evolver(Solver,Residual)
     
     
     %   Late binder
-    function [] = bind(type,object)
-        switch(lower(type))
-            case('residual')
-                if object.is('residual')
+    function [] = bind(object)
+        if isstruct(object)
+            switch(object(1).type)
+                case('residual')
                     residual = object;
-                end
 
-            case('solver')
-                if object.is('solver')
+                case('solver')
                     solver = object;
-                end
+            end
         end
     end
     
