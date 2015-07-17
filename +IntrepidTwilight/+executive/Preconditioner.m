@@ -15,7 +15,7 @@ function pc = Preconditioner(residual,kind)
     
     %   Bind at construction
     if (nargin >= 1)
-        r = residual;
+        bind(residual);
     end
     if (nargin >= 2) && not(isempty(kind))
         bindMethods();
@@ -60,9 +60,9 @@ function pc = Preconditioner(residual,kind)
             end
         end
     end
-    function [] = setKind(object)
-        if (nargin >= 1) && ischar(object)
-            kind = object;
+    function [] = setKind(newKind)
+        if (nargin >= 1) && ischar(newKind)
+            kind = newKind;
             bindMethods();
         else
         end

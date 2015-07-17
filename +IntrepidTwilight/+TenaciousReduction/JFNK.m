@@ -11,17 +11,20 @@ function jfnk = JFNK(residual,preconditioner)
     jfnk.gmres.nu                 = 0.20   ;
     jfnk.newton.relax.over        = 1.1    ;
     
-    
-    %   Containers for object arrays
-    block = 1;
-    
+    %   Hook initializations
+    jfnk.hook.presolve  = @(x) [];
+    jfnk.hook.postsolve = @(x) [];
+    jfnk.hook.prestep   = @(x) [];
+    jfnk.hook.poststep  = @(x) [];
+
+
+
     %   Bind on construction if passed
     if (nargin >= 1) && isstruct(residual)
-        bind('residual',residual);
-        bindSolver();
+        bind(residual);
     end
     if (nargin >= 2) && isstruct(preconditioner)
-        bind('preconditioner',preconditioner);
+        bind(preconditioner);
     end
     
     
@@ -36,10 +39,11 @@ function jfnk = JFNK(residual,preconditioner)
     
     
     %   Public methods
-    jfnk.bind = @(object) bind(object)      ;
-    jfnk.type = 'solver'                    ;
-    jfnk.is   = @(s) strcmpi(s,jfnk.type)   ;
-    jfnk.set  = @(varargin) set(varargin{:});
+    jfnk.type  = 'solver'                   ;
+    jfnk.is    = @(s) strcmpi(s,jfnk.type)  ;
+    jfnk.set   = @(key,value) set(key,value);
+    jfnk.bind  = @(object) bind(object)     ;
+    jfnk.solve = @(x) solve(x)              ;
     
     
     
@@ -50,11 +54,7 @@ function jfnk = JFNK(residual,preconditioner)
     function [] = allocateWorkArrays(x)
         
         %   Determine row count
-        if iscell(x)
-            nRows = max(cellfun(@(c) numel(c),x));
-        else
-            nRows = numel(x);
-        end
+        nRows = numel(x);
         
         %   Determine column count
         if (jfnk.gmres.iteration.maximum == -1)
@@ -86,24 +86,16 @@ function jfnk = JFNK(residual,preconditioner)
         if isstruct(object)
             switch(object(1).type)
                 case('residual')
-                        residual = object;
+                    residual = object;
 
                 case('preconditioner')
-                        preconditioner = object;
+                    preconditioner = object;
             end
         end
     end
-    function [] = bindSolver()
-        if isstruct(residual) && residual(1).is('residual')
-            if numel(residual) == 1
-                jfnk.solve = @(x) solveCoupled(x)   ;
-            else
-                jfnk.solve = @(x) solveSegregated(x);
-            end
-        end
-    end
-    function [] = set(varargin)
-        jfnk = setfield(jfnk,{1},varargin{1:end-1},varargin{end});
+    function [] = set(key,value)
+        keys = strsplit(key,'.')                ;
+        jfnk = setfield(jfnk,{1},keys{:},value) ;
     end
     
     
@@ -114,7 +106,7 @@ function jfnk = JFNK(residual,preconditioner)
     %                    Fully-Coupled Solver                           %
     % ================================================================= %
     
-    function [xNL,stats] = solveCoupled(xNL)
+    function [xNL,stats] = solve(xNL)
         
         %   Allocate arrays if not done already
         if arraysAreNotAllocated
@@ -129,8 +121,14 @@ function jfnk = JFNK(residual,preconditioner)
         [rNL,rNLnorm,stats] = initialize(xNL)                   ;
         notConverged        = rNLnorm > jfnk.tolerance.residual ;
         
+        % Hook
+        jfnk.hook.presolve(xNL);
+        
         %   Iterate
         while notConverged
+            
+            % Hook
+            jfnk.hook.prestep(xNL);
             
             %   Take a step
             [xNL,rNL,dxNorm,rNLnorm,stats] = nonlinearStep(xNL,rNL,rNLnorm,stats);
@@ -144,85 +142,24 @@ function jfnk = JFNK(residual,preconditioner)
             belowIterationMaximum = stats.iterations <= jfnk.iterationMaximum               ;
             notConverged          = (normNotDone || stepNotDone) && belowIterationMaximum   ;
             
+            % Hook
+            jfnk.hook.poststep(xNL);
+            
         end
+        
+        % Hook
+        jfnk.hook.postsolve(xNL);
         
         
         %   Contract vector to the number of actuall iterations
         stats.rNorm = stats.rNorm(1:stats.iterations)  ;
         
     end
-    
-    
-    
-    
-    
-    % ================================================================= %
-    %                       Segregated Solver                           %
-    % ================================================================= %
-    
-    function [xNL,stats] = solveSegregated(xNL)
-        
-        %   Allocate arrays if not done already
-        if arraysAreNotAllocated
-            allocateWorkArrays(xNL);
-        end
-        
-        
-        % ----------------------------------------------- %
-        %                Non-Linear Iterations            %
-        % ----------------------------------------------- %
-        
-        %   Allocate
-        n                                 = numel(xNL)   ;
-        rNL{n,1}                          = 0            ;
-        rNLnorm(n,jfnk.maximumIterations) = 0            ;
-        dxNorm(n,1)                       = 0            ;
-        iteration                         = 1            ;
-        
-        %   Initialize
-        for k = 1:n
-            block = k;
-            [rNL{k},rNLnorm(k,iteration)] = initialize(xNL{k});
-        end
-        notConverged = all(rNLnorm(:,iteration) > jfnk.tolerance.residual);
-        
-        
-        %   Iterate
-        while notConverged
-            
-            for k = 1:n
-                
-                %   Update block index
-                block = k;
-                
-                %   Take a step
-                [xNL{k},rNL{k},dxNorm(k),rNLnorm(k,iteration+1)] = ...
-                    nonlinearStep(xNL{k},rNL{k},rNLnorm(k,iteration));
-                
-                %   Display run-time stuff
-                fprintf('Block %d:\n\t',k);
-                Show(rNLnorm(k,iteration+1));
-            end
-            
-            %   Iteration clean-up
-            iteration            = iteration + 1                                            ;
-            normNotDone           = all( rNLnorm(:,iteration) >= jfnk.tolerance.residual)   ;
-            stepNotDone           = all(       dxNorm         >= jfnk.tolerance.stepSize)   ;
-            belowIterationMaximum =           iteration       <= jfnk.iterationMaximum      ;
-            notConverged          = (normNotDone || stepNotDone) && belowIterationMaximum   ;
-            
-        end
-        
-        %   Contract vector to the number of actuall iterations
-        stats.rNorm     = rNorm(1:iteration);
-        stats.iteration = iteration         ;
-        
-    end
-    
-    
-    
-    
-    
+
+
+
+
+
     % ================================================================= %
     %                 Sub-parts of Nonlinear Solvers                    %
     % ================================================================= %

@@ -3,12 +3,12 @@ function evolver = Evolver(Solver,Residual)
     
     %   Bind at construction
     if (nargin >= 1) && not(isempty(Solver))
-        bind('solver',Solver);
+        bind(Solver);
     else
         solver = 0;
     end
     if (nargin >= 2) && not(isempty(Residual))
-        bind('residual',Residual);
+        bind(Residual);
     else
         residual = 0;
     end
@@ -26,7 +26,7 @@ function evolver = Evolver(Solver,Residual)
     evolver.set     = @(varargin) set(varargin{:});
     evolver.run     = @() evolve();
     evolver.evolve  = @() evolve();
-    evolver.getData = @() getRunData();
+    evolver.getData = @() getData();
     
     %   Initialize closure variables
     times  = 0;
@@ -94,14 +94,15 @@ function evolver = Evolver(Solver,Residual)
         
     end
     
-    function [t,q] = getRunData()
+    function [t,q] = getData()
         t = times;
         q = values;
     end
     
     
-    function [] = set(varargin)
-        evolver = setfield(evolver,varargin{:});
+    function [] = set(key,value)
+        keys    = strsplit(key,'.');
+        evolver = setfield(evolver,{1},keys{:},value);
     end
     
     
