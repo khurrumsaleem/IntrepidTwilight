@@ -113,35 +113,61 @@ function jfnk = JFNK(residual,preconditioner)
             allocateWorkArrays(xNL);
         end
         
+        
+        % Hook
+        
+        
         % ----------------------------------------------- %
         %                Non-Linear Iterations            %
         % ----------------------------------------------- %
         
-        %   Initialize stuff
-        [rNL,rNLnorm,stats] = initialize(xNL)                   ;
-        notConverged        = rNLnorm > jfnk.tolerance.residual ;
-        
-        % Hook
+        %   Hook
         jfnk.hook.presolve(xNL);
+
+
+        %   Allocate stats struct
+        stats.iterations                     = 0;
+        stats.norm(jfnk.maximumIterations,1) = 0;
+
+        %   Initialize
+        [xNL,rNL]     = residual.guard.state(xNL)           ;
+        rNLnorm       = norm(rNL,2)                         ;
+        stats.norm(1) = rNLnorm                             ;
+        notConverged  = rNLnorm > jfnk.tolerance.residual   ;
+        preconditioner.initialize(xNL)                      ;
+        
         
         %   Iterate
         while notConverged
             
-            % Hook
+            %   Hook
             jfnk.hook.prestep(xNL);
+
+
+            %   Evaluate initial residual
+            rNL     = residual.value(xNL)   ;
+            rNLnorm = norm(rNL,2)           ;
             
             %   Take a step
-            [xNL,rNL,dxNorm,rNLnorm,stats] = nonlinearStep(xNL,rNL,rNLnorm,stats);
+            [xNL,rNLnorm,dxNorm] = nonlinearStep(xNL,rNL,rNLnorm);
             
+            %   Update to new state
+            stats.iterations             = stats.iterations + 1 ;
+            stats.norm(stats.iterations) = rNLnorm              ;
+            preconditioner.update(xNL)                          ;
+
+
             %   Display run-time stuff
             Show(rNLnorm);
-            
+
+
             %   Iteration clean-up
-            normNotDone           =     rNLnorm      >= jfnk.tolerance.residual             ;
-            stepNotDone           =      dxNorm      >= jfnk.tolerance.stepSize             ;
-            belowIterationMaximum = stats.iterations <= jfnk.iterationMaximum               ;
-            notConverged          = (normNotDone || stepNotDone) && belowIterationMaximum   ;
-            
+            normNotDone            =     rNLnorm      >= jfnk.tolerance.residual            ;
+            stepNotDone            =      dxNorm      >= jfnk.tolerance.stepSize            ;
+            belowMaximumIterations = stats.iterations <= jfnk.maximumIterations             ;
+            notConverged           = (normNotDone || stepNotDone) && belowMaximumIterations ;
+
+
             % Hook
             jfnk.hook.poststep(xNL);
             
@@ -152,7 +178,7 @@ function jfnk = JFNK(residual,preconditioner)
         
         
         %   Contract vector to the number of actuall iterations
-        stats.rNorm = stats.rNorm(1:stats.iterations)  ;
+        stats.norm = stats.norm(1:stats.iterations);
         
     end
 
@@ -164,21 +190,8 @@ function jfnk = JFNK(residual,preconditioner)
     %                 Sub-parts of Nonlinear Solvers                    %
     % ================================================================= %
     
-    
-    function [rNL,rNLnorm] = initialize(xNL)
-        
-        %   Guard against the initial value
-        [rNL,xNL] = residual(block).guard.state(xNL);
-        
-        %   Initialization
-        rNLnorm = norm(rNL,2)                   ;
-        preconditioner(block).initialize(xNL)   ;
-        
-    end
-    
-    
-    
-    function [xNL,rNL,rNLnorm,dxNorm] = nonlinearStep(xNLm1,rNLm1,rNLnorm)
+   
+    function [xNL,rNLnorm,dxNorm] = nonlinearStep(xNLm1,rNLm1,rNLnorm)
         
         %   Advance in a descent direction
         [xNL,rNL,rNLnorm,dxNorm] = quasiNewtonUpdate(xNLm1,rNLm1,rNLnorm);
@@ -187,17 +200,12 @@ function jfnk = JFNK(residual,preconditioner)
         %   Extrapolate solution
         dxExtrap    = rNL .* (xNL - xNLm1)./(rNL - rNLm1);
         xExtrap     = xNL - dxExtrap            ;
-        rExtrap     = residual(block).value(xExtrap)   ;
+        rExtrap     = residual.value(xExtrap)   ;
         rExtrapNorm = norm(rExtrap,2)           ;
         if rExtrapNorm < 0.9*rNLnorm
             xNL     = xExtrap       ;
-            rNL     = rExtrap       ;
             rNLnorm = rExtrapNorm   ;
         end
-        
-        %   Update preconditions
-        preconditioner(block).update(xNL);
-        Show(rNLnorm);
 
     end
     
@@ -209,7 +217,7 @@ function jfnk = JFNK(residual,preconditioner)
         dx = GMRES(xOld,rOld,rOldNorm);
         
         %   Relax the step size to the gaurded value
-        [rNew,dx] = residual(block).guard.step(xOld,dx);
+        [dx,rNew] = residual.guard.step(xOld,dx);
         
         %   Set-up
         rNewNorm   = norm(rNew,2)               ;
@@ -222,9 +230,9 @@ function jfnk = JFNK(residual,preconditioner)
             %   search for a better, smaller step.
             alphaMin = ...
                 IntrepidTwilight.ConvenientMeans.goldenSectionMinimizeLazily(...
-                    @(alpha) norm(residual(block).value(xOld - alpha*dx),2),...
+                    @(alpha) norm(residual.value(xOld - alpha*dx),2),...
                         [0,1],[rOldNorm,rNewNorm],0.01);
-            rNew     = residual(block).value(xOld - alphaMin*dx)   ;
+            rNew     = residual.value(xOld - alphaMin*dx)   ;
             rNewNorm = norm(rNew,2)                         ;
             dx       = alphaMin*dx                          ;
             
@@ -237,7 +245,7 @@ function jfnk = JFNK(residual,preconditioner)
             rNormTrack = rNewNorm       ;
             while reduced
                 dx         = jfnk.newton.relax.over * dx        ;
-                rNew       = residual(block).value(xOld - dx)   ;
+                rNew       = residual.value(xOld - dx)   ;
                 rNewNorm   = norm(rNew,2)                       ;
                 reduced    = rNewNorm < 0.9*rNormTrack          ;
                 rTrack     = rNew*reduced + rTrack*(1-reduced)  ;
@@ -292,8 +300,8 @@ function jfnk = JFNK(residual,preconditioner)
         
         % First Step (k = 1)
         % Compute J*z1 and store in R
-        w      = preconditioner(block).apply(Z(I,1))                       ;
-        R(I,1) = (residual(block).value(xk + epsilon*w) - rk0) / epsilon   ;
+        w      = preconditioner.apply(Z(I,1))                       ;
+        R(I,1) = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
         
         % Compute Householder vector to bring R(:,1) into upper triangular form
         e      = [1 ; Zeros(1:n-1)]                 ;
@@ -327,8 +335,8 @@ function jfnk = JFNK(residual,preconditioner)
             end
             
             % Compute and store A*zk in R
-            w      = preconditioner(block).apply(Z(I,k))                ;
-            R(I,k) = (residual(block).value(xk + epsilon*w) - rk0) / epsilon   ;
+            w      = preconditioner.apply(Z(I,k))                ;
+            R(I,k) = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
             
             % Apply all previous projections to new the column
             for m = 1:k-1
@@ -381,7 +389,7 @@ function jfnk = JFNK(residual,preconditioner)
         end
         
         dx = Z(I,1:k) * yk                  ;   % Calculate full Newton update
-        dx = preconditioner(block).apply(dx);
+        dx = preconditioner.apply(dx);
     end
 end
 

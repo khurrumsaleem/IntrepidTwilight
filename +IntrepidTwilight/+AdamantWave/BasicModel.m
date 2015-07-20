@@ -1,9 +1,9 @@
 function model = BasicModel()
     
     
-    model.dimensionalizer.mass     = [];
-    model.dimensionalizer.energy   = [];
-    model.dimensionalizer.momentum = [];
+    values.dimensionalizer.mass     = [];
+    values.dimensionalizer.energy   = [];
+    values.dimensionalizer.momentum = [];
 
     
     % ========================================================= %
@@ -11,16 +11,16 @@ function model = BasicModel()
     % ========================================================= %
 
     %   Initial 
-    model.controlVolume.mass            = [];
-    model.controlVolume.energy          = [];
-    model.controlVolume.pressure        = [];
-    model.controlVolume.temperature     = [];
-    model.controlVolume.internalEnergy  = [];
-    model.controlVolume.enthalpy        = [];
-    model.controlVolume.entropy         = [];
-    model.controlVolume.volume          = [];
-    model.controlVolume.source.mass     = [];
-    model.controlVolume.source.energy   = [];
+    values.controlVolume.mass            = [];
+    values.controlVolume.energy          = [];
+    values.controlVolume.pressure        = [];
+    values.controlVolume.temperature     = [];
+    values.controlVolume.internalEnergy  = [];
+    values.controlVolume.enthalpy        = [];
+    values.controlVolume.entropy         = [];
+    values.controlVolume.volume          = [];
+    values.controlVolume.source.mass     = [];
+    values.controlVolume.source.energy   = [];
 
 
     % ========================================================= %
@@ -28,27 +28,27 @@ function model = BasicModel()
     % ========================================================= %
 
     %   Control volume connections
-    model.momentumCell.from = [];
-    model.momentumCell.to   = [];
+    values.momentumCell.from = [];
+    values.momentumCell.to   = [];
     
     
     %   Flow direction
-    model.momentumCell.momentum        = [];
-    model.momentumCell.directionX      = [];
-    model.momentumCell.directionY      = [];
-    model.momentumCell.volumeFrom      = [];
-    model.momentumCell.volumeTo        = [];
-    model.momentumCell.LoD             = [];
-    model.momentumCell.source.momentum = [];
-    model.momentumCell.source.friction = [];
+    values.momentumCell.momentum        = [];
+    values.momentumCell.directionX      = [];
+    values.momentumCell.directionY      = [];
+    values.momentumCell.volumeFrom      = [];
+    values.momentumCell.volumeTo        = [];
+    values.momentumCell.LoD             = [];
+    values.momentumCell.source.momentum = [];
+    values.momentumCell.source.friction = [];
 
 
     %   Interfaces
-    model.interface.up       = [];  %   Upwind volume
-    model.interface.down     = [];  %   Downwind volume
-    model.interface.normalX  = [];  %   Surface normal
-    model.interface.normalY  = [];  %   Surface normal
-    model.interface.flowArea = [];  %   Flow area
+    values.interface.up       = [];  %   Upwind volume
+    values.interface.down     = [];  %   Downwind volume
+    values.interface.normalX  = [];  %   Surface normal
+    values.interface.normalY  = [];  %   Surface normal
+    values.interface.flowArea = [];  %   Flow area
     
     
     
@@ -59,13 +59,13 @@ function model = BasicModel()
     model.get  = @(varargin) get(varargin{:});
     
     function [] = set(varargin)
-        model = setfield(model,varargin{:});
+        values = setfield(values,varargin{:});
     end
     function value = get(varargin)
         if (nargin == 0)
-            value = model;
+            value = values;
         else
-            value = getfield(model,varargin{:});
+            value = getfield(values,varargin{:});
         end
     end
 end

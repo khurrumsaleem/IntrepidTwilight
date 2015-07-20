@@ -1,32 +1,15 @@
-function item = build(buildWhat,problem)
-    
-    switch(lower(buildWhat))
-        case('semidiscretization')
-            item = IntrepidTwilight.executive.makeSemidiscretization(problem);
+function component = build(module,object,varargin)
 
-        case('timestepper')
-            
-            stepper = problem.timeStepper.name;
-            
-            if which(['IntrepidTwilight.TransientStride.',stepper])
-                item = IntrepidTwilight.TransientStride.(stepper)(problem);
-            else
-                error('IntrepidTwilight:executive:build:unknownTimestepper',...
-                    'The requested timestepper ''%s'' could not be found.',stepper);
-            end
-            
-            
-            
-        case('residual')
-            item = IntrepidTwilight.executive.Residual(problem);
-            
-            
-        case('solver')
-            item = IntrepidTwilight.executive.Solver(problem);
-            
-            
-            
-        otherwise
+    objectName = which(['IntrepidTwilight.',module,'.',object]);
+
+    if not(isempty(objectName))
+        objectName = regexpi(objectName,'\\([a-z0-9\_]+?)\.m','tokens');
+        objectName = char(objectName{1});
+        component  = IntrepidTwilight.(module).(objectName)(varargin{:});
+
+    else
+        component = [];
+
     end
-    
+
 end

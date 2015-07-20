@@ -46,7 +46,7 @@ hem.modelValue('momentumCell','source','momentum', @(varargin) 0);
 
 rho0 = 9.965569351080000e+02;
 e0   = 1.125536123942350e+05;
-v0   = 1E-5;
+v0   = 0.1;
 rhoe0 = rho0 * e0;
 rhov0 = rho0 * v0;
 
@@ -66,11 +66,11 @@ hem.modelValue('momentumCell','momentum', momentum  );
 
 hem.build();
 
-hem.evolverValue('time','span'          , [0,2]                 )   ;
-hem.evolverValue('time','step','maximum', 1                     )   ;
-hem.evolverValue('time','step','minimum', 1E-7                  )   ;
-hem.evolverValue('time','step','goal'   , 0.1                   )   ;
-hem.evolverValue('initialCondition'     , {momentum;[mass;energy]})   ;
+hem.evolverValue('time.span'          , [0,2]                 )   ;
+hem.evolverValue('time.step.maximum', 1                     )   ;
+hem.evolverValue('time.step.minimum', 1E-7                  )   ;
+hem.evolverValue('time.step.goal'   , 0.1                   )   ;
+hem.evolverValue('initialCondition'     , {[mass;energy];momentum})   ;
 hem.evolverValue('saveRate'             , 0.1                   )   ;
 
 hem.evolve();

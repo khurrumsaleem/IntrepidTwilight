@@ -4,7 +4,7 @@ function r = Residual(timeDiscretization)
 
     %   Bind at construction if passed
     if (nargin >= 1)
-        bind('timediscretization',timeDiscretization);
+        bind(timeDiscretization);
     end
 
 
@@ -67,18 +67,18 @@ function r = Residual(timeDiscretization)
 
 
     %   Guard
-    function [value,dq] = guardStep(q,dq)
+    function [dq,rValue] = guardStep(q,dq)
         if isa(r.userDefined.guard.step,'function_handle');
-            [value,dq] = r.userDefined.guard.step(r,q,dq);
+            [dq,rValue] = r.userDefined.guard.step(r,q,dq);
         else
-            value = r.value(q-dq);
+            rValue = r.value(q-dq);
         end
     end
-    function [value,q] = guardState(q)
+    function [q,rValue] = guardState(q)
         if isa(r.userDefined.guard.state,'function_handle');
-            [value,q] = r.userDefined.guard.state(r,q);
+            [q,rValue] = r.userDefined.guard.state(r,q);
         else
-            value = r.value(q);
+            rValue = r.value(q);
         end
     end
 

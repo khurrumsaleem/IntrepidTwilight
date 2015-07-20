@@ -10,9 +10,11 @@ function hem = HEM()
     components.solver              = 0;
     components.evolver             = 0;
     
-    hem.set          = @(component,varargin) set(component,varargin{:});
-    hem.modelValue   = @(varargin) set('model'  ,varargin{:});
-    hem.evolverValue = @(varargin) set('evolver',varargin{:});
+    hem.set          = @(component,varargin) set(component,varargin{:}) ;
+    hem.bind         = @(component) bind(component)                     ;
+    hem.get          = @(component) get(component)                      ;
+    hem.modelValue   = @(varargin) set('model'  ,varargin{:})           ;
+    hem.evolverValue = @(varargin) set('evolver',varargin{:})           ;
     
 
 
@@ -21,7 +23,7 @@ function hem = HEM()
     hem.discretization.space = 'Quasi2DUpwind'                          ;
     hem.discretization.time  = 'ImplicitEuler'                          ;
     hem.solver.name          = 'JFNK'                                   ;
-    hem.solver.scheme        = 'segregated'                             ;
+    hem.solver.scheme        = 'two-level'                              ;
     hem.preconditioner       = 'none'                                   ;
 
 
@@ -40,45 +42,14 @@ function hem = HEM()
         
         
         switch(lower(hem.solver.scheme))
-            case('segregated')
-                
-                %   Build full sd
-                args = {hem.discretization.space,components.model.get(),struct('scheme','segregated')};
-                components.spacediscretization = buildComponent('AdamantWave',args{:});
-                %
-                %   Build CV block
-                sdCV.sd     = components.spacediscretization;
-                sdCV.update = @(time) sdCV.sd.update(time)      ;
-                sdCV.rhs    = @(qCV)  sdCV.sd.rhsMassEnergy(qCV);
-                %
-                %   Build MC block
-                sdMC.sd     = components.spacediscretization;
-                sdMC.update = @(time) sdMC.sd.update(time);
-                sdMC.rhs    = @(qMC) sdMC.sd.rhsMomentum(qMC);
-                %
-                %   Build time steppers
-                components.timediscretization    = buildComponent('TransientStride',hem.discretization.time,sdMC);
-                components.timediscretization(2) = buildComponent('TransientStride',hem.discretization.time,sdCV);
-                %
-                %   Build residuals
-                components.residual    = buildComponent('executive','Residual',components.timediscretization(1));
-                components.residual(2) = buildComponent('executive','Residual',components.timediscretization(2));
-                %
-                %   Build preconditioners
-                components.preconditioner    = buildComponent('executive','Preconditioner',components.residual(1),'none');
-                components.preconditioner(2) = buildComponent('executive','Preconditioner',components.residual(2),'none');
-                %
-                %   Build solver
-                components.solver = buildComponent('TenaciousReduction',hem.solver.name,components.residual,components.preconditioner);
-                %
-                %   Build evolver
-                evolverResidual.update = @(value,time,step) arrayfun(@(s,e) s.update(value{e},time,step),components.residual,1:2);
-                evolverResidual.is     = @(s) strcmpi(s,'residual');
-                components.evolver = buildComponent('executive','Evolver',components.solver,evolverResidual);
-                
-                
+
+            case('two-level')                
+                hem = IntrepidTwilight.AdamantWave.HEM_TwoLevel(hem);
+
+
+
             case('coupled')
-                args = {hem.discretization.space,hem.model,struct('scheme','coupled')};
+                args = {hem.discretization.space,components.model,struct('scheme','coupled')};
                 components.spacediscretization = buildComponent('AdamantWave',args{:});
                 %
                 %   Build temporal discretization
@@ -109,20 +80,20 @@ function hem = HEM()
     function data = getData()
         data = components.evolver.getData();
     end
-    
+    function [] = bind(object)
+        if isfield(components,object.type)
+            components.(object.type) = object;
+        end
+    end
     function [] = set(component,varargin)
         components.(component).set(varargin{:});
+    end
+    function comp = get(component)
+        comp = components.(component).get();
     end
 
 end
 
 function component = buildComponent(module,object,varargin)
-    objectName = which(['IntrepidTwilight.',module,'.',object]);
-    if not(isempty(objectName))
-        objectName = regexpi(objectName,'\\([a-z0-9\_]+?)\.m','tokens');
-        objectName = char(objectName{1});
-        component  = IntrepidTwilight.(module).(objectName)(varargin{:});
-    else
-        component = [];
-    end
+    component = IntrepidTwilight.executive.build(module,object,varargin{:});
 end

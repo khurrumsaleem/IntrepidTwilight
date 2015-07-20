@@ -1,4 +1,4 @@
-function q2Dup = Quasi2DUpwind(model,options)
+function q2Dup = Quasi2DUpwind(model)
     
     % Return closure
     q2Dup.type                  = 'spaceDiscretization'         ;
@@ -8,8 +8,16 @@ function q2Dup = Quasi2DUpwind(model,options)
     q2Dup.rhsEnergy             = @(rhoe) rhsEnergy(rhoe)       ;
     q2Dup.rhsMassEnergy         = @(qCV)  rhsMassEnergy(qCV)    ;
     q2Dup.rhsMomentum           = @(rhov) rhsMomentum(rhov)     ;
-    q2Dup.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
+    q2Dup.blockDiagonalJacobian = @(q) jacobianBlockDiagonal(q) ;
     q2Dup.update                = @(time) update(time)          ;
+    %   
+    q2Dup.setMass     = @(mass)     setMass(mass)           ;
+    q2Dup.setMomentum = @(momentum) setMomentum(momentum)   ;
+    q2Dup.setEnergy   = @(energy)   setEnergy(energy)       ;
+    %
+    q2Dup.updateClosureEnvironment = @() updateClosureEnvironment() ;
+    q2Dup.updateThermodynamicState = @() updateThermodynamicState() ;
+    q2Dup.updateVelocity           = @() updateVelocity()           ;
     
     
     
@@ -24,9 +32,9 @@ function q2Dup = Quasi2DUpwind(model,options)
     momentum = model.momentumCell.momentum  ;
     
     %   Dimensionalizers
-    rhoDim  = CriticalDensity()                     ;
-    rhoeDim = DimensioningInternalEnergy * rhoDim   ;
-    rhovDim = rhoDim * momentum(1)                  ;
+    rhoDim  = 1;%CriticalDensity()                     ;
+    rhoeDim = 1;%DimensioningInternalEnergy * rhoDim   ;
+    rhovDim = 1;%rhoDim * momentum(1)                  ;
     
     % Control volume sense
     from  = model.momentumCell.from ;
@@ -36,18 +44,10 @@ function q2Dup = Quasi2DUpwind(model,options)
     
     %   Indices
     nCV   = max([from(:);to(:)]);
-    nMC   = length(from);
-    
-    switch(lower(options.scheme))
-        case('coupled')
-            iRho  = (1:nCV)'        ;
-            iRhoe = nCV + iRho      ;
-            iRhov = 2*nCV + (1:nMC)';
-        case('segregated')
-            iRho  = (1:nCV)'    ;
-            iRhoe = nCV + iRho  ;
-            iRhov = (1:nMC)'    ;
-    end
+    nMC   = length(from)        ;
+    iRho  = 1:nCV               ;
+    iRhoe = iRho  + nCV         ;
+    iRhov = iRhoe + nCV         ;
 
 
     % Volumes of momentum cells
@@ -72,9 +72,9 @@ function q2Dup = Quasi2DUpwind(model,options)
     % ======================================================================= %
 
     % Normalized (fractional volume) of momentum cells
-    volTotal     = volumeFrom + volumeTo;
-    volumeFrom   = volumeFrom  ./ volTotal;
-    volumeTo  = volumeTo ./ volTotal;
+    volTotal   = volumeFrom +  volumeTo;
+    volumeFrom = volumeFrom ./ volTotal;
+    volumeTo   = volumeTo   ./ volTotal;
 
 
     % Momentum cell-Interface dots
@@ -95,11 +95,7 @@ function q2Dup = Quasi2DUpwind(model,options)
 
 
     %   Jacobi finite difference epsilon
-    if isfield(options,'epsilon')
-        epsilon  = options.epsilon;
-    else
-        epsilon = 1E-8;
-    end
+    epsilon = 1E-8;
 
 
     % Initialization for inclusion into the closure environment
@@ -122,6 +118,22 @@ function q2Dup = Quasi2DUpwind(model,options)
 
 
 
+    
+    
+    % =================================================== %
+    %                       Setters                       %
+    % =================================================== %
+    function [] = setMass(mass)
+        rho = mass;
+    end
+    function [] = setMomentum(momentum)
+        rhov = momentum;
+    end
+    function [] = setEnergy(energy)
+        rhoe = energy;
+    end
+    
+    
 
     % =================================================== %
     %                     Full RHS                        %
@@ -140,7 +152,11 @@ function q2Dup = Quasi2DUpwind(model,options)
         f = [rhsMass()/rhoDim;rhsEnergy()/rhoeDim;rhsMomentum()/rhovDim];
         
     end
-    
+
+
+    % =================================================== %
+    %             Combination Mass-Energy RHS             %
+    % =================================================== %
     function f = rhsMassEnergy(q)
         
         % Pull conserved values
@@ -148,14 +164,94 @@ function q2Dup = Quasi2DUpwind(model,options)
         rhoe = q(iRhoe) * rhoeDim   ;
 
 
-        updateClosureEnvironment();
-        
-        
         f = [rhsMass()/rhoDim;rhsEnergy()/rhoeDim];
         
     end
-    
-    
+
+
+
+    %{
+    ===========================================================
+                             Mass RHS
+    ===========================================================
+    %}
+    function f = rhsMass(rhoStar)
+        
+        if (nargin >= 1)
+            rho = rhoStar * rhoDim;
+        end
+        
+        % Advection term
+        vzRho = vCV.*(  (vCV>0).*rho(from) + (vCV<=0).*rho(to)  );
+        
+        % Total RHS
+        f = Ccv*(vzRho) + sRho(rho,rhoe,rhov,TD,t) ;
+        
+    end
+
+
+
+    %{
+    ===========================================================
+                            Energy RHS
+    ===========================================================
+    %}
+    function f = rhsEnergy(rhoeStar)
+        
+        if (nargin >= 1)
+            rhoe = rhoeStar * rhoeDim;
+        end
+        
+        
+        % Advection term
+        vzRhoh = vCV.*(  (vCV>0).*TD.rhoh(from)  + (vCV<=0).*TD.rhoh(to)  );
+        
+        % Total RHS
+        f  = Ccv*vzRhoh + sRhoe(rho,rhoe,rhov,TD,t) ;
+        
+    end
+
+
+
+    %{
+    ===========================================================
+                          Momentum RHS
+    ===========================================================
+    %}
+    function f = rhsMomentum(rhovStar)
+        
+        if (nargin >= 1)
+            rhov = rhovStar * rhovDim;
+        end
+        
+        
+        % Upwind/downwind momentum advection
+        fup   = rhov(up)            ;
+        fdown = rhov(down)          ;
+        fmom  = vMC.*(fdown - fup)  ;
+        
+        % Pieces
+        advect = (Cmc*(fmom.*Ainter) + Cinter*(TD.P(iInter).*Ainter));
+        buoy   = -g.*rhoBar                     ;
+        fric   = -friction*LoD.*abs(rhov).*vCV  ;
+        
+        % Total RHS
+        f = advect + buoy + fric + sRhov(rho,rhoe,rhov,TD,t) ;
+        
+    end
+
+
+
+
+
+
+
+    %{
+    ===========================================================
+                          Update functions
+    ===========================================================
+    %}
+
     function [] = update(time)
         t = time;
     end
@@ -191,84 +287,13 @@ function q2Dup = Quasi2DUpwind(model,options)
 
 
 
-
     %{
     ===========================================================
-                             Mass RHS
+                          Jacobians
     ===========================================================
     %}
-    function f = rhsMass(rhoStar)
-        
-        if (nargin >= 1)
-            rho = rhoStar * rhoDim;
-            updateClosureEnvironment();
-        end
-        
-        % Advection term
-        vzRho = vCV.*(  (vCV>0).*rho(from) + (vCV<=0).*rho(to)  );
-        
-        % Total RHS
-        f = Ccv*(vzRho) + sRho(rho,rhoe,rhov,TD,t) ;
-        
-    end
 
-    
-    
-    
-    %{
-    ===========================================================
-                            Energy RHS
-    ===========================================================
-    %}
-    function f = rhsEnergy(rhoeStar)
-        
-        if (nargin >= 1)
-            rhoe = rhoeStar * rhoeDim;
-            updateClosureEnvironment();
-        end
-        
-        
-        % Advection term
-        vzRhoh = vCV.*(  (vCV>0).*TD.rhoh(from)  + (vCV<=0).*TD.rhoh(to)  );
-        
-        % Total RHS
-        f  = Ccv*vzRhoh + sRhoe(rho,rhoe,rhov,TD,t) ;
-        
-    end
-    
-    
-
-    %{
-    ===========================================================
-                          Momentum RHS
-    ===========================================================
-    %}
-    function f = rhsMomentum(rhovStar)
-        
-        if (nargin >= 1)
-            rhov = rhovStar * rhovDim;
-            updateClosureEnvironment();
-        end
-        
-        
-        % Upwind/downwind momentum advection
-        fup   = rhov(up)            ;
-        fdown = rhov(down)          ;
-        fmom  = vMC.*(fdown - fup)  ;
-        
-        % Pieces
-        advect = (Cmc*(fmom.*Ainter) + Cinter*(TD.P(iInter).*Ainter));
-        buoy   = -g.*rhoBar                     ;
-        fric   = -friction*LoD.*abs(rhov).*vCV  ;
-        
-        % Total RHS
-        f = advect + buoy + fric + sRhov(rho,rhoe,rhov,TD,t) ;
-        
-    end
-    
-    
-    
-    function dfdqOut = blockDiagonalJacobian(q)
+    function dfdqOut = jacobianBlockDiagonal(q)
         
         %   Pull state values
         rhoRef  = q(iRho)  * rhoDim     ;
@@ -437,10 +462,6 @@ function q2Dup = Quasi2DUpwind(model,options)
         dfdqOut = dfdq;
         
     end
-    
-    
-    
-    
-    
-    
+
+
 end

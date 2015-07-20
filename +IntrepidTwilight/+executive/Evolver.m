@@ -22,11 +22,13 @@ function evolver = Evolver(Solver,Residual)
     evolver.initialCondition  = 0    ;
     evolver.saveRate          = 0.1  ;
     
-    evolver.bind    = @(type,object) bind(type,object);
-    evolver.set     = @(varargin) set(varargin{:});
-    evolver.run     = @() evolve();
-    evolver.evolve  = @() evolve();
-    evolver.getData = @() getData();
+    evolver.type    = 'evolver'                         ;
+    evolver.is      = @(s) strcmpi(s,'evolver')         ;
+    evolver.bind    = @(type,object) bind(type,object)  ;
+    evolver.set     = @(varargin) set(varargin{:})      ;
+    evolver.run     = @() evolve()                      ;
+    evolver.evolve  = @() evolve()                      ;
+    evolver.getData = @() getData()                     ;
     
     %   Initialize closure variables
     times  = 0;
@@ -87,7 +89,7 @@ function evolver = Evolver(Solver,Residual)
             end
 
             %   Print statistics
-            fprintf('%5.2E seconds: %3G iterations, %5.2E residual\n',t,stats.iterations,stats.norm(end));
+            fprintf('%5.2E seconds: %3G iterations, %5.2E residual\n',t,stats(1).iterations,stats(1).norm(end));
             
             
         end
