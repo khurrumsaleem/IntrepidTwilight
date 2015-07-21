@@ -28,13 +28,13 @@ function q2Dup = Quasi2DUpwind(model)
     % Conserved quantities
     mass     = model.controlVolume.mass     ;
     energy   = model.controlVolume.energy   ;
-    volume   = model.controlVolume.volume   ;
+    volCV    = model.controlVolume.volume   ;
     momentum = model.momentumCell.momentum  ;
     
     %   Dimensionalizers
-    rhoDim  = 1;%CriticalDensity()                     ;
-    rhoeDim = 1;%DimensioningInternalEnergy * rhoDim   ;
-    rhovDim = 1;%rhoDim * momentum(1)                  ;
+    massDim     = 1;%CriticalDensity()                     ;
+    energyDim   = 1;%DimensioningInternalEnergy * rhoDim   ;
+    momentumDim = 1;%rhoDim * momentum(1)                  ;
     
     % Control volume sense
     from  = model.momentumCell.from ;
@@ -43,24 +43,24 @@ function q2Dup = Quasi2DUpwind(model)
     down  = model.interface.down    ;
     
     %   Indices
-    nCV   = max([from(:);to(:)]);
-    nMC   = length(from)        ;
-    iRho  = 1:nCV               ;
-    iRhoe = iRho  + nCV         ;
-    iRhov = iRhoe + nCV         ;
+    nCV = max([from(:);to(:)])  ;
+    nMC = length(from)          ;
+    iM  = 1:nCV                 ;
+    iE  = iM + nCV              ;
+    iP  = iE + nCV              ;
 
 
     % Volumes of momentum cells
-    volumeFrom = model.momentumCell.volumeFrom  ;
-    volumeTo   = model.momentumCell.volumeTo    ;
+    volMCfrom = model.momentumCell.volumeFrom   ;
+    volMCto   = model.momentumCell.volumeTo     ;
     
     % Interface parameters
     Ainter = model.interface.flowArea   ;
     
     % Sources
-    sRho  = model.controlVolume.source.mass     ;
-    sRhoe = model.controlVolume.source.energy   ;
-    sRhov = model.momentumCell.source.momentum  ;
+    sMass     = model.controlVolume.source.mass     ;
+    sEnergy   = model.controlVolume.source.energy   ;
+    sMomentum = model.momentumCell.source.momentum  ;
     
     % Momentum 
     friction = model.momentumCell.source.friction   ;
@@ -72,9 +72,9 @@ function q2Dup = Quasi2DUpwind(model)
     % ======================================================================= %
 
     % Normalized (fractional volume) of momentum cells
-    volTotal   = volumeFrom +  volumeTo;
-    volumeFrom = volumeFrom ./ volTotal;
-    volumeTo   = volumeTo   ./ volTotal;
+    volMC     = volMCfrom .* volCV(from) +  volMCto .* volCV(from)  ;
+    volMCfrom = volMCfrom ./ volMC                                  ;
+    volMCto   = volMCto   ./ volMC                                  ;
 
 
     % Momentum cell-Interface dots
@@ -99,22 +99,20 @@ function q2Dup = Quasi2DUpwind(model)
 
 
     % Initialization for inclusion into the closure environment
-    rho  = mass     ./ volume   ;
-    rhoe = energy   ./ volume   ;
-    rhov = momentum ./ volTotal ;
-    rhoBar = 0;
-    vCV    = 0;
-    vMC    = 0;
-    t      = 0;
-    dfdq   = {zeros(nCV) ; zeros(nCV) ; zeros(nMC)};
+    massBar = 0;
+    vCV     = 0;
+    vMC     = 0;
+    t       = 0;
+    dfdq    = {zeros(nCV) ; zeros(nCV) ; zeros(nMC)};
 
 
     %   Create a Thermodynamic struct TD (used for passing 
     %   already-calculated properties to constituitive relations)
-    TD.e    = rhoe ./ rho           ;
-    TD.T    = Temperature(rho,TD.e) ;
-    TD.P    = Pressure(rho,TD.T)    ;
-    TD.rhoh = rhoe + TD.P           ;
+    TD.rho  = mass   ./ volCV           ;
+    TD.e    = energy ./ mass            ;
+    TD.T    = Temperature(TD.rho,TD.e)  ;
+    TD.P    = Pressure(TD.rho,TD.T)     ;
+    TD.rhoh = TD.rho.* TD.e + TD.P      ;
 
 
 
@@ -123,14 +121,14 @@ function q2Dup = Quasi2DUpwind(model)
     % =================================================== %
     %                       Setters                       %
     % =================================================== %
-    function [] = setMass(mass)
-        rho = mass;
+    function [] = setMass(massStar)
+        mass = massStar;
     end
-    function [] = setMomentum(momentum)
-        rhov = momentum;
+    function [] = setMomentum(momentumStar)
+        momentum = momentumStar;
     end
-    function [] = setEnergy(energy)
-        rhoe = energy;
+    function [] = setEnergy(energyStar)
+        energy = energyStar;
     end
     
     
@@ -141,15 +139,15 @@ function q2Dup = Quasi2DUpwind(model)
     function f = rhs(q)
         
         % Pull conserved values
-        rho  = q(iRho)  * rhoDim    ;
-        rhoe = q(iRhoe) * rhoeDim   ;
-        rhov = q(iRhov) * rhovDim   ;
+        mass     = q(iM) * massDim      ;
+        energy   = q(iE) * energyDim    ;
+        momentum = q(iP) * momentumDim  ;
 
 
         updateClosureEnvironment();
         
         
-        f = [rhsMass()/rhoDim;rhsEnergy()/rhoeDim;rhsMomentum()/rhovDim];
+        f = [rhsMass()/massDim;rhsEnergy()/energyDim;rhsMomentum()/momentumDim];
         
     end
 
@@ -160,11 +158,11 @@ function q2Dup = Quasi2DUpwind(model)
     function f = rhsMassEnergy(q)
         
         % Pull conserved values
-        rho  = q(iRho)  * rhoDim    ;
-        rhoe = q(iRhoe) * rhoeDim   ;
+        mass   = q(iM) * massDim    ;
+        energy = q(iE) * energyDim  ;
 
 
-        f = [rhsMass()/rhoDim;rhsEnergy()/rhoeDim];
+        f = [rhsMass()/massDim;rhsEnergy()/energyDim];
         
     end
 
@@ -175,17 +173,17 @@ function q2Dup = Quasi2DUpwind(model)
                              Mass RHS
     ===========================================================
     %}
-    function f = rhsMass(rhoStar)
+    function f = rhsMass(massStar)
         
         if (nargin >= 1)
-            rho = rhoStar * rhoDim;
+            mass = massStar * massDim;
         end
         
         % Advection term
-        vzRho = vCV.*(  (vCV>0).*rho(from) + (vCV<=0).*rho(to)  );
+        vzRho = vCV .* (  (vCV>0).*TD.rho(from)  +  (vCV<=0).*TD.rho(to)  );
         
         % Total RHS
-        f = Ccv*(vzRho) + sRho(rho,rhoe,rhov,TD,t) ;
+        f = Ccv*(vzRho) + sMass(mass,energy,momentum,TD,t) ;
         
     end
 
@@ -196,10 +194,10 @@ function q2Dup = Quasi2DUpwind(model)
                             Energy RHS
     ===========================================================
     %}
-    function f = rhsEnergy(rhoeStar)
+    function f = rhsEnergy(energyStar)
         
         if (nargin >= 1)
-            rhoe = rhoeStar * rhoeDim;
+            energy = energyStar * energyDim;
         end
         
         
@@ -207,7 +205,7 @@ function q2Dup = Quasi2DUpwind(model)
         vzRhoh = vCV.*(  (vCV>0).*TD.rhoh(from)  + (vCV<=0).*TD.rhoh(to)  );
         
         % Total RHS
-        f  = Ccv*vzRhoh + sRhoe(rho,rhoe,rhov,TD,t) ;
+        f  = Ccv*vzRhoh + sEnergy(mass,energy,momentum,TD,t) ;
         
     end
 
@@ -218,12 +216,14 @@ function q2Dup = Quasi2DUpwind(model)
                           Momentum RHS
     ===========================================================
     %}
-    function f = rhsMomentum(rhovStar)
+    function f = rhsMomentum(momentumStar)
         
         if (nargin >= 1)
-            rhov = rhovStar * rhovDim;
+            momentum = momentumStar * momentumDim;
         end
         
+        %   Intensive momentum
+        rhov = momentum ./ volMC ;
         
         % Upwind/downwind momentum advection
         fup   = rhov(up)            ;
@@ -231,12 +231,12 @@ function q2Dup = Quasi2DUpwind(model)
         fmom  = vMC.*(fdown - fup)  ;
         
         % Pieces
-        advect = (Cmc*(fmom.*Ainter) + Cinter*(TD.P(iInter).*Ainter));
-        buoy   = -g.*rhoBar                     ;
-        fric   = -friction*LoD.*abs(rhov).*vCV  ;
+        advect = (Cmc*(fmom.*Ainter) + Cinter*(TD.P(iInter).*Ainter))   ;
+        buoy   = -g.*massBar                                            ;
+        fric   = -friction*LoD.*abs(rhov).*vCV                          ;
         
         % Total RHS
-        f = advect + buoy + fric + sRhov(rho,rhoe,rhov,TD,t) ;
+        f = advect + buoy + fric + sMomentum(mass,energy,momentum,TD,t) ;
         
     end
 
@@ -262,25 +262,25 @@ function q2Dup = Quasi2DUpwind(model)
     end
     
     function [] = updateVelocity()
-        % Get average density and CV surface velocities
-        rhoBar    = volumeFrom.*rho(from) + volumeTo.*rho(to);
-        
-        %   Control volume advection
-        vCV       = rhov ./ rhoBar;
+        % Volume-average density and CV surface velocities
+        massBar = volMCfrom .* mass(from) + volMCto .* mass(to) ;
+        vCV     = momentum ./ massBar                           ;
         
         %   Momentum cell advection
-        denom     = 1./(rhoBar(up)+rhoBar(down))                ;
-        alphaUp   = rhov(up).*denom                             ;
-        alphaDown = rhov(up).*denom                             ;
-        vMC       = alphaUp .* upDotN + alphaDown .* downDotN   ;
+        vMC = (vCV(to) .* upDotN + vCV(down) .* downDotN) / 2;
+%         denom     = 1./(massBar(up)+massBar(down))              ;
+%         alphaUp   = rhov(up).*denom                             ;
+%         alphaDown = rhov(up).*denom                             ;
+%         vMC       = alphaUp .* upDotN + alphaDown .* downDotN   ;
     end
     
     function [] = updateThermodynamicState()
         % Thermodynamic properites
-        TD.e               = rhoe ./ rho                            ;
-        [TD.T,twoPhiState] = Temperature(rho,TD.e,TD.T)             ;
-        TD.P               = Pressure(rho,TD.T,false,twoPhiState)   ;
-        TD.rhoh            = rhoe + TD.P                            ;
+        TD.rho             = mass   ./ volCV                        ;
+        TD.e               = energy ./ mass                         ;
+        [TD.T,twoPhiState] = Temperature(TD.rho,TD.e,TD.T)          ;
+        TD.P               = Pressure(TD.rho,TD.T,false,twoPhiState);
+        TD.rhoh            = energy ./ volCV + TD.P                 ;
     end
 
 
@@ -296,51 +296,54 @@ function q2Dup = Quasi2DUpwind(model)
     function dfdqOut = jacobianBlockDiagonal(q)
         
         %   Pull state values
-        rhoRef  = q(iRho)  * rhoDim     ;
-        rhoeRef = q(iRhoe) * rhoeDim    ;
-        rhovRef = q(iRhov) * rhovDim    ;
+        massRef     = q(iM) * massDim       ;
+        energyRef   = q(iE) * energyDim     ;
+        momentumRef = q(iP) * momentumDim   ;
         
         
         %   Perturbed values
-        aboveOne = abs(rhoRef) >= 1;
-        rhoStep  = epsilon*(rhoRef.*aboveOne + not(aboveOne));
-        rhoTD    = rhoRef +  rhoStep;
+        aboveOne = abs(massRef) >= 1;
+        massStep = epsilon*(massRef.*aboveOne + not(aboveOne));
+        massTD   = massRef +  massStep;
         %
-        aboveOne = abs(rhoeRef) >= 1;
-        rhoeStep  = epsilon*(rhoeRef.*aboveOne + not(aboveOne));
-        rhoeTD    = rhoeRef +  rhoeStep;
+        aboveOne   = abs(energyRef) >= 1;
+        energyStep = epsilon*(energyRef.*aboveOne + not(aboveOne));
+        energyTD   = energyRef +  energyStep;
         %
-        aboveOne = abs(rhovRef) >= 1;
-        rhovStep  = epsilon*(rhovRef.*aboveOne + not(aboveOne));
-        rhovTD    = rhovRef +  rhovStep;
+        aboveOne     = abs(momentumRef) >= 1;
+        momentumStep = epsilon*(momentumRef.*aboveOne + not(aboveOne));
+        momentumTD   = momentumRef +  momentumStep;
         %
         %   Build large perturbed arrays for fast Thermodynamic update
-        rho    = [rhoRef  ; rhoTD   ; rhoRef  ; rhoRef  ];
-        rhoe   = [rhoeRef ; rhoeRef ; rhoeTD  ; rhoeRef ];
-        rhov   = [rhovRef ; rhovRef ; rhovRef ; rhovTD  ];
+        mass     = [massRef     ; massTD      ; massRef     ; massRef       ];
+        energy   = [energyRef   ; energyRef   ; energyTD    ; energyRef     ];
+        momentum = [momentumRef ; momentumRef ; momentumRef ; momentumTD    ];
         
         
         %   Update and store perturbed values
         TD.T = [TD.T;TD.T;TD.T;TD.T];
         updateThermodynamicState();
-        Tblock     = TD.T    ;
-        Pblock     = TD.P    ;
-        rhohBlock  = TD.rhoh ;
+        rhoBlock   = TD.rho ;
+        eBlock     = TD.e   ;
+        Tblock     = TD.T   ;
+        Pblock     = TD.P   ;
+        rhohBlock  = TD.rhoh;
         
         %   Create unmutated TD struct
-        TDref.e    = rhoeRef ./ rhoRef  ;
+        TDref.rho  = rhoBlock(1:nCV)    ;
+        TDref.e    = eBlock(1:nCV)      ;
         TDref.T    = Tblock(1:nCV)      ;
         TDref.P    = Pblock(1:nCV)      ;
         TDref.rhoh = rhohBlock(1:nCV)   ;
         
         %   Store compressed perturbed vectors and reset closure variables
-        rhoTD  = [ rhoRef  ; rhoTD  ]   ;
-        rhoeTD = [ rhoeRef ; rhoeTD ]   ;
-        rhovTD = [ rhovRef ; rhovTD ]   ;
-        rho    = rhoRef                 ;
-        rhoe   = rhoeRef                ;
-        rhov   = rhovRef                ;
-        TD     = TDref                  ;
+        massTD     = [ massRef     ; massTD     ];
+        energyTD   = [ energyRef   ; energyTD   ];
+        momentumTD = [ momentumRef ; momentumTD ];
+        mass       = massRef                    ;
+        energy     = energyRef                  ;
+        momentum   = momentumRef                ;
+        TD         = TDref                      ;
 
 
 
@@ -360,19 +363,21 @@ function q2Dup = Quasi2DUpwind(model)
 
             %   Perturb
             nCVk       = nCV+k;
-            rho(k)     = rhoTD(nCVk);
-            TD.e(k)    = rhoeRef(k) / rho(k);
-            TD.T(k)    = Tblock(nCVk);
-            TD.P(k)    = Pblock(nCVk);
+            mass(k)    = massTD(nCVk)   ;
+            TD.rho(k)  = rhoBlock(nCVk) ;
+            TD.e(k)    = eBlock(nCVk)   ;
+            TD.T(k)    = Tblock(nCVk)   ;
+            TD.P(k)    = Pblock(nCVk)   ;
             TD.rhoh(k) = rhohBlock(nCVk);
             updateVelocity();
             massPlus  = rhsMass();
 
             %   Calculate
-            dfdq{1}(:,k) = (massPlus - mass0)/(rhoStep(k));
+            dfdq{1}(:,k) = (massPlus - mass0)/(massStep(k));
             
             %   Reset
-            rho(k)     = rhoRef(k)      ;
+            mass(k)    = massRef(k)     ;
+            TD.rho(k)  = TDref.rho(k)   ;
             TD.e(k)    = TDref.e(k)     ;
             TD.T(k)    = TDref.T(k)     ;
             TD.P(k)    = TDref.P(k)     ;
@@ -394,20 +399,22 @@ function q2Dup = Quasi2DUpwind(model)
         for k = K
 
             %   Perturb
-            nCVk       = 2*nCV+k;
-            rhoe(k)    = rhoeTD(nCV+k);
-            TD.e(k)    = rhoe(k) / rho(k);
-            TD.T(k)    = Tblock(nCVk);
-            TD.P(k)    = Pblock(nCVk);
+            nCVk       = 2*nCV + k      ;
+            energy(k)  = energyTD(nCV+k);
+            TD.rho(k)  = rhoBlock(nCVk) ;
+            TD.e(k)    = eBlock(nCVk)   ;
+            TD.T(k)    = Tblock(nCVk)   ;
+            TD.P(k)    = Pblock(nCVk)   ;
             TD.rhoh(k) = rhohBlock(nCVk);
             updateVelocity();
             energyPlus = rhsEnergy();
 
             %   Calculate
-            dfdq{2}(:,k) = (energyPlus - energy0)/(rhoeStep(k));
+            dfdq{2}(:,k) = (energyPlus - energy0)/(energyStep(k));
 
             %   Reset
-            rhoe(k)    = rhoeRef(k)     ;
+            energy(k)  = energyRef(k)   ;
+            TD.rho(k)  = TDref.rho(k)   ;
             TD.e(k)    = TDref.e(k)     ;
             TD.T(k)    = TDref.T(k)     ;
             TD.P(k)    = TDref.P(k)     ;
@@ -430,32 +437,35 @@ function q2Dup = Quasi2DUpwind(model)
         for k = K
             
             %   Perturb
-            nMCk       = 3*nCV+k;
-            rhov(k)    = rhovTD(nMC+k);
-            TD.T(k)    = Tblock(nMCk);
-            TD.P(k)    = Pblock(nMCk);
-            TD.rhoh(k) = rhohBlock(nMCk);
+            nMCk        = 3*nCV+k;
+            momentum(k) = momentumTD(nMC+k) ;
+            TD.rho(k)   = rhoBlock(nMCk)    ;
+            TD.e(k)     = eBlock(nMCk)      ;
+            TD.T(k)     = Tblock(nMCk)      ;
+            TD.P(k)     = Pblock(nMCk)      ;
+            TD.rhoh(k)  = rhohBlock(nMCk)   ;
             updateVelocity();
             momentumPlus = rhsMomentum();
 
             %   Calculate
-            dfdq{3}(:,k) = (momentumPlus - momentum0)/(rhovStep(k));
+            dfdq{3}(:,k) = (momentumPlus - momentum0)/(momentumStep(k));
 
             %   Reset
-            rhov(k)    = rhovRef(k)     ;
-            TD.e(k)    = TDref.e(k)     ;
-            TD.T(k)    = TDref.T(k)     ;
-            TD.P(k)    = TDref.P(k)     ;
-            TD.rhoh(k) = TDref.rhoh(k)  ;
+            momentum(k) = momentumRef(k);
+            TD.rho(k)   = TDref.rho(k)  ;
+            TD.e(k)     = TDref.e(k)    ;
+            TD.T(k)     = TDref.T(k)    ;
+            TD.P(k)     = TDref.P(k)    ;
+            TD.rhoh(k)  = TDref.rhoh(k) ;
 
         end
         
         
         %   Reset all mutations to closure environment
-        rho  = rhoRef   ;
-        rhoe = rhoeRef  ;
-        rhov = rhovRef  ;
-        TD   = TDref    ;
+        mass     = massRef      ;
+        energy   = energyRef    ;
+        momentum = momentumRef  ;
+        TD       = TDref        ;
         
         
         %   Pass out block diagonal

@@ -50,12 +50,12 @@ v0   = 0.1;
 rhoe0 = rho0 * e0;
 rhov0 = rho0 * v0;
 
-volume      = ones(12,1)        ;
-mass        = rho0  * ones(12,1);
-energy      = rhoe0 * ones(12,1);
-momentum    = rhov0 * ones(12,1);
+volume      = 0.1  .* ones(12,1);
+mass        = rho0 .* volume    ;
+energy      = e0   .* mass      ;
+momentum    = mass .* v0        ;
 momentum(1) = 10*momentum(1)  	;
-hem.modelValue('controlVolume','volume' , ones(12,1));
+hem.modelValue('controlVolume','volume' , volume    );
 hem.modelValue('controlVolume','mass'   , mass      );
 hem.modelValue('controlVolume','energy' , energy    );
 hem.modelValue('momentumCell','momentum', momentum  );
