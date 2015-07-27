@@ -1,125 +1,238 @@
-function q2Dup = Quasi2DUpwind(model)
+function q2Dup = Quasi2DUpwind(varargin)
     
-    % Return closure
-    q2Dup.type                  = 'spaceDiscretization'         ;
-    q2Dup.is                    = @(s) strcmpi(s,q2Dup.type)    ;
-    q2Dup.rhs                   = @(q)    rhs(q)                ;
-    q2Dup.rhsMass               = @(rho)  rhsMass (rho)         ;
-    q2Dup.rhsEnergy             = @(rhoe) rhsEnergy(rhoe)       ;
-    q2Dup.rhsMassEnergy         = @(qCV)  rhsMassEnergy(qCV)    ;
-    q2Dup.rhsMomentum           = @(rhov) rhsMomentum(rhov)     ;
+    %   Inherit
+    q2Dup = IntrepidTwilight.AdamantWave.SpaceDiscretization(varargin{:});
+    
+    %   Grab retrieve method and purge it
+    retrieve = q2Dup.retrieve;
+    q2Dup = rmfield(q2Dup,'retrieve');
+
+
+    % =================================================== %
+    %                   Public Methods                    %
+    % =================================================== %
+
+    q2Dup.prepare = @() prepare();
+    %
+    q2Dup.rhs           = @(q)    rhs(q)            ;
+    q2Dup.rhsMass       = @(rho)  rhsMass (rho)     ;
+    q2Dup.rhsEnergy     = @(rhoe) rhsEnergy(rhoe)   ;
+    q2Dup.rhsMassEnergy = @(qCV)  rhsMassEnergy(qCV);
+    q2Dup.rhsMomentum   = @(rhov) rhsMomentum(rhov) ;
+    %
     q2Dup.blockDiagonalJacobian = @(q) jacobianBlockDiagonal(q) ;
-    q2Dup.update                = @(time) update(time)          ;
     %   
     q2Dup.setMass     = @(mass)     setMass(mass)           ;
     q2Dup.setMomentum = @(momentum) setMomentum(momentum)   ;
     q2Dup.setEnergy   = @(energy)   setEnergy(energy)       ;
     %
+    q2Dup.update                   = @(time) update(time)           ;
     q2Dup.updateClosureEnvironment = @() updateClosureEnvironment() ;
     q2Dup.updateThermodynamicState = @() updateThermodynamicState() ;
     q2Dup.updateVelocity           = @() updateVelocity()           ;
+
+
+
+
+    % =================================================== %
+    %                   Self-Parameters                   %
+    % =================================================== %
+    q2Dup.set('epsilon'                 ,1E-8   );
+    q2Dup.set('dimensionalizer.mass'    ,1      );
+    q2Dup.set('dimensionalizer.energy'  ,1      );
+    q2Dup.set('dimensionalizer.momentum',1      );
+
+
+
+
+
+    % =================================================== %
+    %               Declare Closure Variables             %
+    % =================================================== %
     
+    % ------------------------------- %
+    %         Self-specified          %
+    % ------------------------------- %
     
-    
-    % ======================================================================= %
-    %                            Parameter unpacking                          %
-    % ======================================================================= %
-    
-    % Conserved quantities
-    mass     = model.controlVolume.mass     ;
-    energy   = model.controlVolume.energy   ;
-    volCV    = model.controlVolume.volume   ;
-    momentum = model.momentumCell.momentum  ;
-    
-    %   Dimensionalizers
-    massDim     = 1;%CriticalDensity()                     ;
-    energyDim   = 1;%DimensioningInternalEnergy * rhoDim   ;
-    momentumDim = 1;%rhoDim * momentum(1)                  ;
-    
-    % Control volume sense
-    from  = model.momentumCell.from ;
-    to    = model.momentumCell.to   ; 
-    up    = model.interface.up      ;
-    down  = model.interface.down    ;
-    
-    %   Indices
-    nCV = max([from(:);to(:)])  ;
-    nMC = length(from)          ;
-    iM  = 1:nCV                 ;
-    iE  = iM + nCV              ;
-    iP  = iE + nCV              ;
-
-
-    % Volumes of momentum cells
-    volMCfrom = model.momentumCell.volumeFrom   ;
-    volMCto   = model.momentumCell.volumeTo     ;
-    
-    % Interface parameters
-    Ainter = model.interface.flowArea   ;
-    
-    % Sources
-    sMass     = model.controlVolume.source.mass     ;
-    sEnergy   = model.controlVolume.source.energy   ;
-    sMomentum = model.momentumCell.source.momentum  ;
-    
-    % Momentum 
-    friction = model.momentumCell.source.friction   ;
-    LoD      = model.momentumCell.LoD               ;
-
-    
-    % ======================================================================= %
-    %                            Parameter calculating                        %
-    % ======================================================================= %
-
-    % Normalized (fractional volume) of momentum cells
-    volMC     = volMCfrom .* volCV(from) +  volMCto .* volCV(from)  ;
-    volMCfrom = volMCfrom ./ volMC                                  ;
-    volMCto   = volMCto   ./ volMC                                  ;
-
-
-    % Momentum cell-Interface dots
-    upDotN   =  model.momentumCell.directionX(up)  .*model.interface.normalX    + ...
-                model.momentumCell.directionY(up)  .*model.interface.normalY    ;
-    downDotN =  model.momentumCell.directionX(down).*model.interface.normalX    + ...
-                model.momentumCell.directionY(down).*model.interface.normalY    ;
-
-
-    % Gravity
-    theta = atan(model.momentumCell.directionY./model.momentumCell.directionX);
-    g     = 9.81*cos(theta + pi/2);
-
-
-    % Summation matrices
-    [Ccv,Cmc,Cinter,iInter] = ...
-        IntrepidTwilight.AdamantWave.toolbox.GetSummationMatrices([from,to],[up,down],[upDotN,downDotN]);    
-
-
-    %   Jacobi finite difference epsilon
+    massDim     = [];
+    energyDim   = [];
+    momentumDim = [];
+    %
     epsilon = 1E-8;
 
 
-    % Initialization for inclusion into the closure environment
-    massBar = 0;
-    vCV     = 0;
-    vMC     = 0;
-    t       = 0;
-    dfdq    = {zeros(nCV) ; zeros(nCV) ; zeros(nMC)};
+    % ------------------------------- %
+    %         Model-specified         %
+    % ------------------------------- %
+
+    mass     = [];
+    energy   = [];
+    momentum = [];
+    %
+    volCV    = [];
+    %
+    from  = [] ;
+    to    = [] ; 
+    up    = [] ;
+    down  = [] ;
+    %
+    nCV = [] ;
+    nMC = [] ;
+    iM  = [] ;
+    iE  = [] ;
+    iP  = [] ;
+    %
+    volMCfrom = [] ;
+    volMCto   = [] ;
+    %
+    Ainter = [] ;
+    %
+    sMass     = [] ;
+    sEnergy   = [] ;
+    sMomentum = [] ;
+    %
+    friction = [] ;
+    LoD      = [] ;
+    %
+    volMC     = [] ;
+    volMCfrom = [] ;
+    volMCto   = [] ;
+    %
+    upDotN   =  [] ;
+    downDotN =  [] ;
+    %
+    theta = [] ;
+    g     = [] ;
+    %
+    Ccv    = [];
+    Cmc    = [];
+    Cinter = [];
+    iInter = [];
+    %
+    massBar = [];
+    vCV     = [];
+    vMC     = [];
+    t       = [];
+    dfdq    = [];
+    %
+    TD = struct();
+    
+    
+    
 
 
-    %   Create a Thermodynamic struct TD (used for passing 
-    %   already-calculated properties to constituitive relations)
-    TD.rho  = mass   ./ volCV           ;
-    TD.e    = energy ./ mass            ;
-    TD.T    = Temperature(TD.rho,TD.e)  ;
-    TD.P    = Pressure(TD.rho,TD.T)     ;
-    TD.rhoh = TD.rho.* TD.e + TD.P      ;
+    % =================================================== %
+    %                  Method Defintions                  %
+    % =================================================== %
+
+    function [] = prepare()
+        assignModelValues();
+        assignSelfValues();
+    end
+    
+    function [] = assignModelValues()
+        
+        model = retrieve()  ;
+        model = model.get() ;
+        
+        % Conserved quantities
+        mass     = model.controlVolume.mass     ;
+        energy   = model.controlVolume.energy   ;
+        volCV    = model.controlVolume.volume   ;
+        momentum = model.momentumCell.momentum  ;
+        
+        % Control volume sense
+        from  = model.momentumCell.from ;
+        to    = model.momentumCell.to   ;
+        up    = model.interface.up      ;
+        down  = model.interface.down    ;
+        
+        % Volumes of momentum cells
+        volMCfrom = model.momentumCell.volumeFrom   ;
+        volMCto   = model.momentumCell.volumeTo     ;
+        
+        % Interface parameters
+        Ainter = model.interface.flowArea   ;
+        
+        % Sources
+        sMass     = model.controlVolume.source.mass     ;
+        sEnergy   = model.controlVolume.source.energy   ;
+        sMomentum = model.momentumCell.source.momentum  ;
+        
+        % Momentum
+        friction = model.momentumCell.source.friction   ;
+        LoD      = model.momentumCell.LoD               ;
 
 
+
+
+        % ======================================================================= %
+        %                            Parameter calculating                        %
+        % ======================================================================= %
+        
+        %   Indices
+        nCV = max([from(:);to(:)])  ;
+        nMC = length(from)          ;
+        iM  = 1:nCV                 ;
+        iE  = iM + nCV              ;
+        iP  = iE + nCV              ;
+        
+        % Normalized (fractional volume) of momentum cells
+        volMC     = volMCfrom .* volCV(from) +  volMCto .* volCV(from)  ;
+        volMCfrom = volMCfrom ./ volMC                                  ;
+        volMCto   = volMCto   ./ volMC                                  ;
+        
+        
+        % Momentum cell-Interface dots
+        upDotN   =  model.momentumCell.directionX(up)  .*model.interface.normalX    + ...
+            model.momentumCell.directionY(up)  .*model.interface.normalY    ;
+        downDotN =  model.momentumCell.directionX(down).*model.interface.normalX    + ...
+            model.momentumCell.directionY(down).*model.interface.normalY    ;
+        
+        
+        % Gravity
+        theta = atan(model.momentumCell.directionY./model.momentumCell.directionX);
+        g     = 9.81*cos(theta + pi/2);
+        
+        
+        % Summation matrices
+        [Ccv,Cmc,Cinter,iInter] = ...
+            IntrepidTwilight.AdamantWave.toolbox.GetSummationMatrices([from,to],[up,down],[upDotN,downDotN]);
+        
+        
+        %   Jacobi finite difference epsilon
+        epsilon = 1E-8;
+        
+        
+        % Initialization for inclusion into the closure environment
+        massBar = 0;
+        vCV     = 0;
+        vMC     = 0;
+        t       = 0;
+        dfdq    = {zeros(nCV) ; zeros(nCV) ; zeros(nMC)};
+        
+        
+        %   Create a Thermodynamic struct TD (used for passing
+        %   already-calculated properties to constituitive relations)
+        TD.rho  = mass   ./ volCV           ;
+        TD.e    = energy ./ mass            ;
+        TD.T    = Temperature(TD.rho,TD.e)  ;
+        TD.P    = Pressure(TD.rho,TD.T)     ;
+        TD.rhoh = TD.rho.* TD.e + TD.P      ;
+
+    end
+    
+    function [] = assignSelfValues()
+        epsilon     = q2Dup.get('epsilon')                  ;
+        massDim     = q2Dup.get('dimensionalizer.mass')      ;
+        energyDim   = q2Dup.get('dimensionalizer.energy')    ;
+        momentumDim = q2Dup.get('dimensionalizer.momentum')  ;
+    end
 
     
     
     % =================================================== %
-    %                       Setters                       %
+    %                  Getters/Setters                    %
     % =================================================== %
     function [] = setMass(massStar)
         mass = massStar;

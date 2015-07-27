@@ -5,12 +5,12 @@ function evolver = Evolver(Solver,Residual)
     if (nargin >= 1) && not(isempty(Solver))
         bind(Solver);
     else
-        solver = 0;
+        solver = [];
     end
     if (nargin >= 2) && not(isempty(Residual))
         bind(Residual);
     else
-        residual = 0;
+        residual = [];
     end
     
 
@@ -104,7 +104,7 @@ function evolver = Evolver(Solver,Residual)
     
     function [] = set(key,value)
         keys    = strsplit(key,'.');
-        evolver = setfield(evolver,{1},keys{:},value);
+        evolver = setfield(evolver,keys{:},value);
     end
     
     

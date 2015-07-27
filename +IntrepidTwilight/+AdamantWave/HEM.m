@@ -1,99 +1,38 @@
 function hem = HEM()
 
+    %   Inherit
+    hem = IntrepidTwilight.executive.Simulation();
 
-    %   Attach evolver instance directly to simulation base
-    components.model               = IntrepidTwilight.AdamantWave.BasicModel();
-    components.spacediscretization = 0;
-    components.timediscretization  = 0;
-    components.residual            = 0;
-    components.preconditioner      = 0;
-    components.solver              = 0;
-    components.evolver             = 0;
-    
-    hem.set          = @(component,varargin) set(component,varargin{:}) ;
-    hem.bind         = @(component) bind(component)                     ;
-    hem.get          = @(component) get(component)                      ;
-    hem.modelValue   = @(varargin) set('model'  ,varargin{:})           ;
-    hem.evolverValue = @(varargin) set('evolver',varargin{:})           ;
-    
-
-
-    %   User options
-    hem.model                = IntrepidTwilight.AdamantWave.BasicModel();
-    hem.discretization.space = 'Quasi2DUpwind'                          ;
-    hem.discretization.time  = 'ImplicitEuler'                          ;
-    hem.solver.name          = 'JFNK'                                   ;
-    hem.solver.scheme        = 'two-level'                              ;
-    hem.preconditioner       = 'none'                                   ;
-
-
-
-    
-    %   Finalizes options and builds components
-    hem.build  = @() build()    ;
-    hem.evolve = @() evolve()   ;
-    hem.run    = @() evolve()   ;
-    hem.data   = @() getData()  ;
-
-
+    %   Set module and remove user's ability to do likewise
+    hem.setBuildModuleName(struct('spacediscretization','AdamantWave','model','AdamantWave'));
+    hem = rmfield(hem,'setBuildModuleName');
     
     
-    function [] = build()
-        
-        
-        switch(lower(hem.solver.scheme))
+    %   Make name setters and remove user's ability to do likewise
+    hem = hem.makeChoice(hem,'spacediscretization',IntrepidTwilight.AdamantWave.spacediscretizations());
+    hem = hem.makeChoice(hem,'timediscretization',IntrepidTwilight.TransientStride.timediscretizations());
+    hem = hem.makeChoice(hem,'residual',{'residual'});
+    hem = hem.makeChoice(hem,'preconditioner',{'Preconditioner'});
+    hem = hem.makeChoice(hem,'solver',IntrepidTwilight.TenaciousReduction.solvers());
+    hem = hem.makeChoice(hem,'evolver',{'evolver'});
+    hem = rmfield(hem,'makeChoice');
 
-            case('two-level')                
-                hem = IntrepidTwilight.AdamantWave.HEM_TwoLevel(hem);
-
-
-
-            case('coupled')
-                args = {hem.discretization.space,components.model,struct('scheme','coupled')};
-                components.spacediscretization = buildComponent('AdamantWave',args{:});
-                %
-                %   Build temporal discretization
-                components.timediscretization = buildComponent('TransientStride',hem.discretization.time,components.spacediscretization);
-                %
-                %   Build residual
-                components.residual = buildComponent('executive','Residual',components.timediscretization);
-                %
-                %   Build preconditioner
-                components.preconditioner = buildComponent('executive','Preconditioner',components.residual,components.preconditioner);
-                %
-                %   Build solver
-                components.solver = buildComponent('TenaciousReduction',hem.solver.name,components.residual,components.preconditioner);
-                %
-                %   Build evolver
-                components.evolver = buildComponent('executive','Evolver',components.solver,components.residual);
-
-            otherwise
-        end
-        
-    end
     
-    
-    function [] = evolve()
-        components.evolver.evolve();
-    end
-    
-    function data = getData()
-        data = components.evolver.getData();
-    end
-    function [] = bind(object)
-        if isfield(components,object.type)
-            components.(object.type) = object;
-        end
-    end
-    function [] = set(component,varargin)
-        components.(component).set(varargin{:});
-    end
-    function comp = get(component)
-        comp = components.(component).get();
-    end
+    %   Set Defaults
+    hem.choose.spacediscretization.Quasi2DUpwind();
+    hem.choose.timediscretization.ImplicitEuler();
+    hem.choose.residual.residual();
+    hem.choose.preconditioner.Preconditioner();
+    hem.choose.solver.JFNK();
+    hem.choose.evolver.evolver();
+
+    %   Bind basic AdamantWave module
+    hem.bind(IntrepidTwilight.AdamantWave.BasicModel());
+
+
 
 end
-
-function component = buildComponent(module,object,varargin)
-    component = IntrepidTwilight.executive.build(module,object,varargin{:});
-end
+% 
+% function component = buildComponent(module,object,varargin)
+%     component = IntrepidTwilight.executive.build(module,object,varargin{:});
+% end

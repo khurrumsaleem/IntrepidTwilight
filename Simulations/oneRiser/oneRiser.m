@@ -8,29 +8,29 @@ s2 = sqrt(2);
 
 
 %  12 control volumes
-hem.modelValue('momentumCell','from', (1:12)');
-hem.modelValue('momentumCell','to'  , [2:12,1]');
+hem.set.model('momentumCell.from', (1:12)');
+hem.set.model('momentumCell.to'  , [2:12,1]');
 %
 %   Flow direction
 
-hem.modelValue('momentumCell','directionX',[+0;+0;+0;+0;+1;+1;+0;+0;+0;+0;-1;-1]);
-hem.modelValue('momentumCell','directionY',[-1;-1;-1;-1;+0;+0;+1;+1;+1;+1;+0;+0]);
+hem.set.model('momentumCell.directionX',[+0;+0;+0;+0;+1;+1;+0;+0;+0;+0;-1;-1]);
+hem.set.model('momentumCell.directionY',[-1;-1;-1;-1;+0;+0;+1;+1;+1;+1;+0;+0]);
+hem.set.model('momentumCell.volumeFrom', ones(12,1)/2);
+hem.set.model('momentumCell.volumeTo', ones(12,1)/2);
+hem.set.model('momentumCell.LoD', 1);
+hem.set.model('momentumCell.source.friction',0.1);
 %
 %   Interfaces
-hem.modelValue('interface','up', (1:12)'  );
-hem.modelValue('interface','down', [2:12,1]');
-hem.modelValue('interface','normalX', [+0, +0, +0, +r2, +1, +r2, +0, +0, +0, -r2, -1, -r2]');
-hem.modelValue('interface','normalY', [-1, -1, -1, -r2, +0, +r2, +1, +1, +1, +r2, +0, -r2]');
-hem.modelValue('interface','flowArea', [+1, +1, +1, +s2, +1, +s2, +1, +1, +1, +s2, +1, +s2]');
-hem.modelValue('momentumCell','volumeFrom', ones(12,1)/2);
-hem.modelValue('momentumCell','volumeTo', ones(12,1)/2);
-hem.modelValue('momentumCell','LoD', 1);
-hem.modelValue('momentumCell','source','friction',0.1);
+hem.set.model('interface.up', (1:12)'  );
+hem.set.model('interface.down', [2:12,1]');
+hem.set.model('interface.normalX', [+0, +0, +0, +r2, +1, +r2, +0, +0, +0, -r2, -1, -r2]');
+hem.set.model('interface.normalY', [-1, -1, -1, -r2, +0, +r2, +1, +1, +1, +r2, +0, -r2]');
+hem.set.model('interface.flowArea', [+1, +1, +1, +s2, +1, +s2, +1, +1, +1, +s2, +1, +s2]');
 
 %   Sources
-hem.modelValue('controlVolume','source','mass'   , @(varargin) 0);
-hem.modelValue('controlVolume','source','energy' , @(varargin) 0);
-hem.modelValue('momentumCell','source','momentum', @(varargin) 0);
+hem.set.model('controlVolume.source.mass'   , @(varargin) 0);
+hem.set.model('controlVolume.source.energy' , @(varargin) 0);
+hem.set.model('momentumCell.source.momentum', @(varargin) 0);
 
 % problem.miscellaneous.nCV      = max([problem.geometry.from;problem.geometry.to]);
 % problem.miscellaneous.nMC      = length(problem.geometry.from);
@@ -55,51 +55,24 @@ mass        = rho0 .* volume    ;
 energy      = e0   .* mass      ;
 momentum    = mass .* v0        ;
 momentum(1) = 10*momentum(1)  	;
-hem.modelValue('controlVolume','volume' , volume    );
-hem.modelValue('controlVolume','mass'   , mass      );
-hem.modelValue('controlVolume','energy' , energy    );
-hem.modelValue('momentumCell','momentum', momentum  );
+hem.set.model('controlVolume.volume' , volume    );
+hem.set.model('controlVolume.mass'   , mass      );
+hem.set.model('controlVolume.energy' , energy    );
+hem.set.model('momentumCell.momentum', momentum  );
 
-% hem.modelValue('dimensionalizer','mass')     = rho0 ;
-% hem.modelValue('dimensionalizer','energy')   = rhoe0;
-% hem.modelValue('dimensionalizer','momentum') = rhov0;
+% hem.set.model('dimensionalizer','mass')     = rho0 ;
+% hem.set.model('dimensionalizer','energy')   = rhoe0;
+% hem.set.model('dimensionalizer','momentum') = rhov0;
 
 hem.build();
 
-hem.evolverValue('time.span'          , [0,2]                 )   ;
-hem.evolverValue('time.step.maximum', 1                     )   ;
-hem.evolverValue('time.step.minimum', 1E-7                  )   ;
-hem.evolverValue('time.step.goal'   , 0.1                   )   ;
-hem.evolverValue('initialCondition'     , {[mass;energy];momentum})   ;
-hem.evolverValue('saveRate'             , 0.1                   )   ;
+hem.set.evolver('time.span'        , [0,2]                   )   ;
+hem.set.evolver('time.step.maximum', 1                       )   ;
+hem.set.evolver('time.step.minimum', 1E-7                    )   ;
+hem.set.evolver('time.step.goal'   , 0.1                     )   ;
+hem.set.evolver('initialCondition' , {[mass;energy];momentum})   ;
+hem.set.evolver('saveRate'         , 0.1                     )   ;
 
 hem.evolve();
 
-%   Method choices
-% problem.semidiscretization.name         = 'Quasi2DUpwind'   ;
-% problem.timeStepper.name                = 'implicitEuler'   ;
-% problem.timeStepper.stepSize            = 0.2               ;
-% problem.solver.name                     = 'JFNK'            ;
-% problem.solver.preconditioner.type      = 'none'            ;
-% problem.solver.preconditioner.type      = 'block-jacobi'    ;
-% problem.solver.preconditioner.type      = 'full-stagnant'   ;
-% problem.solver.preconditioner.blockSize = [problem.miscellaneous.nCV;problem.miscellaneous.nCV;problem.miscellaneous.nMC];
 
-
-% qHi = [996.8/rho0*onesCV;Inf*onesCV;Inf*onesMC];
-% qLo = [1E-5*onesCV;-Inf*onesCV;-Inf*onesMC];
-% problem.solver.guard.value = @(q)    guardValue(q,qLo,qHi,problem);
-% problem.solver.guard.step  = @(q,dq) guardStep(q,dq,qLo,qHi,problem);
-
-% tic;
-% simulation.run([0,1],0.01,0.1);
-% toc;
-
-
-
-% sd     = IntrepidTwilight.AdamantWave.Quasi2DUpwind(problem);
-% dfFull = IntrepidTwilight.ConvenientMeans.numericalJacobianFull(sd.rhs,problem.initialState.q0);
-% dfFull = eye(size(dfFull)) - 0.1*dfFull;
-% 
-% Lambda = eig(dfFull,'vector');
-% Show(real(Lambda))

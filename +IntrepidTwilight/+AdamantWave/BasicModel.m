@@ -19,8 +19,8 @@ function model = BasicModel()
     values.controlVolume.enthalpy        = [];
     values.controlVolume.entropy         = [];
     values.controlVolume.volume          = [];
-    values.controlVolume.source.mass     = [];
-    values.controlVolume.source.energy   = [];
+    values.controlVolume.source.mass     = @()[];
+    values.controlVolume.source.energy   = @()[];
 
 
     % ========================================================= %
@@ -39,7 +39,7 @@ function model = BasicModel()
     values.momentumCell.volumeFrom      = [];
     values.momentumCell.volumeTo        = [];
     values.momentumCell.LoD             = [];
-    values.momentumCell.source.momentum = [];
+    values.momentumCell.source.momentum = @()[];
     values.momentumCell.source.friction = [];
 
 
@@ -58,8 +58,9 @@ function model = BasicModel()
     model.set  = @(varargin) set(varargin{:});
     model.get  = @(varargin) get(varargin{:});
     
-    function [] = set(varargin)
-        values = setfield(values,varargin{:});
+    function [] = set(key,value)
+        keys   = strsplit(key,'.');
+        values = setfield(values,keys{:},value);
     end
     function value = get(varargin)
         if (nargin == 0)
