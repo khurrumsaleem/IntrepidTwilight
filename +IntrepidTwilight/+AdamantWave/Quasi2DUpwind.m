@@ -1,18 +1,13 @@
-function q2Dup = Quasi2DUpwind(varargin)
+function q2Dup = Quasi2DUpwind(config)
     
     %   Inherit
-    q2Dup = IntrepidTwilight.AdamantWave.SpaceDiscretization(varargin{:});
-    
-    %   Grab retrieve method and purge it
-    retrieve = q2Dup.retrieve;
-    q2Dup = rmfield(q2Dup,'retrieve');
+    q2Dup = IntrepidTwilight.AdamantWave.SpaceDiscretization();
+    q2Dup = q2Dup.changeID(q2Dup,'Quasi2DUpWind');
 
 
     % =================================================== %
     %                   Public Methods                    %
     % =================================================== %
-
-    q2Dup.prepare = @() prepare();
     %
     q2Dup.rhs           = @(q)    rhs(q)            ;
     q2Dup.rhsMass       = @(rho)  rhsMass (rho)     ;
@@ -41,8 +36,22 @@ function q2Dup = Quasi2DUpwind(varargin)
     q2Dup.set('dimensionalizer.mass'    ,1      );
     q2Dup.set('dimensionalizer.energy'  ,1      );
     q2Dup.set('dimensionalizer.momentum',1      );
+    if (nargin >= 1)
+        q2Dup.set(config);
+    end
 
 
+
+    % =================================================== %
+    %                     Model Binder                    %
+    % =================================================== %
+    model = [];
+    q2Dup.bind = @(m) bind(m);
+    function [] = bind(object)
+        if isstruct(object) && object.is('model')
+            model = object;
+        end
+    end
 
 
 
@@ -124,17 +133,14 @@ function q2Dup = Quasi2DUpwind(varargin)
     % =================================================== %
     %                  Method Defintions                  %
     % =================================================== %
-
+    q2Dup.prepare = @() prepare();
     function [] = prepare()
         assignModelValues();
         assignSelfValues();
     end
     
     function [] = assignModelValues()
-        
-        model = retrieve()  ;
-        model = model.get() ;
-        
+
         % Conserved quantities
         mass     = model.controlVolume.mass     ;
         energy   = model.controlVolume.energy   ;

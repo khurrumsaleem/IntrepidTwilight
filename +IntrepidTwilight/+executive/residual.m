@@ -1,60 +1,38 @@
-function r = Residual(timeDiscretization)
+function r = Residual(config)
 
-    ts = 0;
+    %   Inherit and setup
+    r = IntrepidTwilight.executive.Component();
+    r = r.changeID(r,'residual','residual');
+    r.dependencies = {'timediscretization'};
 
-    %   Bind at construction if passed
-    if (nargin >= 1)
-        bind(timeDiscretization);
+
+    %   Binder
+    ts     = [];
+    r.bind = @(object) bind(object);
+    function [] = bind(object)
+        if isstruct(object) && object.is('timediscretization')
+            ts = object;
+        end
     end
 
 
-    %   Default guard (does nothing)
-    r.guard.step  = @(q,dq) guardStep(q,dq) ;
-    r.guard.state = @(q)    guardState(q)   ;
-
-
-    %   Initialization for user-defined guard
-    r.userDefined.guard.step  = [];
-    r.userDefined.guard.state = [];
-
-
-    %   Public methods
-    r.type                  = 'residual'                    ;
-    r.is                    = @(s) strcmpi(s,r.type)        ;
-    r.bind                  = @(object) bind(object)        ;
-    r.value                 = @(q) value(q)                 ;
-    r.update                = @(q,t,dt) update(q,t,dt)      ;
-    r.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
-    r.jacobian              = @(q) jacobian(q)              ;
-
-
     %   Residual value
+    r.value = @(q) value(q);
     function r = value(q)
         r = q - ts.qStar(q);
     end
 
 
-
-    %   Late binder
-    function [] = bind(object)
-        if isstruct(object)
-            switch(object(1).type)
-                case('timediscretization')
-                        ts = object;
-            end
-        end
-    end
-    
-
-
-    %   Update function
+    %   Updater
+    r.update = @(q,t,dt) update(q,t,dt);
     function [] = update(q,t,dt)
         ts.update(q,t,dt);
     end
 
 
-
     %   Jacobians
+    r.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q) ;
+    r.jacobian              = @(q) jacobian(q)              ;
     function drdq = blockDiagonalJacobian(q)
         dfdq = ts.blockDiagonalJacobian(q)                              ;
         drdq = cellfun(@(c) eye(size(c)) - c,dfdq,'UniformOutput',false);
@@ -65,21 +43,49 @@ function r = Residual(timeDiscretization)
     end
 
 
-
-    %   Guard
-    function [dq,rValue] = guardStep(q,dq)
-        if isa(r.userDefined.guard.step,'function_handle');
-            [dq,rValue] = r.userDefined.guard.step(r,q,dq);
-        else
-            rValue = r.value(q-dq);
-        end
+    %   Default guard
+    r.guard.step  = @(q,dq) guardStep(q,dq) ;
+    r.guard.state = @(q)    guardState(q)   ;
+    r.set('guard.state',@(r,q)   simpleBacktracker(r,q));
+    r.set('guard.step' ,@(r,q,dq)simpleBacktracker(r,q,dq));
+    %
+    %   Wraps r in the closure which is passed to the, possibly user-defined, guards
+    function [dq,rValue] = guardStep(q,dq)       
+        guard = r.get('guard.step');
+        [dq,rValue] = guard(r,q,dq);
     end
     function [q,rValue] = guardState(q)
-        if isa(r.userDefined.guard.state,'function_handle');
-            [q,rValue] = r.userDefined.guard.state(r,q);
-        else
-            rValue = r.value(q);
+        guard = r.get('guard.state');
+        [q,rValue] = guard(r,q);
+    end
+    %
+    %   Only looks for NaNs and relaxs the value
+    function [qValue,rValue] = simpleBacktracker(r,q,dq)
+        switch(nargin)
+            case(2)
+                %   State
+                rValue = r(q);
+                while any(isnan(rValue))
+                    q      = 0.9*q  ;
+                    rValue = r(q)   ;
+                end
+                qValue = q;
+            case(3)
+                    %   Step
+                rValue = r(q-dq);
+                while any(isnan(rValue))
+                    dq     = 0.5*dq     ;
+                    rValue = r(q - dq)  ;
+                end
+                qValue = dq;
         end
+    end
+
+
+
+    %   Set key-store 
+    if (nargin >= 1)
+        r.set(config);
     end
 
 end

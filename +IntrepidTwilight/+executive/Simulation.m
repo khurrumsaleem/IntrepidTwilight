@@ -1,5 +1,9 @@
 function simulation = Simulation(moduleName)
     
+    %   Inherit
+    simulation = IntrepidTwilight.executive.Object();
+    
+    
     if (nargin >= 1) && not(isempty(moduleName))
         setBuildModuleName(moduleName);
     end
@@ -8,40 +12,44 @@ function simulation = Simulation(moduleName)
     %   Define the components of a Simulation
     componentNames = {'model','spacediscretization','timediscretization',...
         'residual','preconditioner','solver','evolver'};
-    moduleNames    = {'','','TransientStride','executive','executive',...
+    moduleNameDefaults = {'','','TransientStride','executive','executive',...
         'TenaciousReduction','executive'};
     
     
     %   Allocate containers
-    for component = componentNames 
-        components.(component{1}) = []  ;   %   Container for object instances
-        names.(component{1})      = []  ;   %   Container for object choices
-        isNotBuilt.(component{1}) = true;   %   Build indicators
+    for m = 1:numel(componentNames)  %#ok<*FXUP>
+        componentName               = componentNames{m}     ;
+        moduleNames.(componentName) = moduleNameDefaults{m} ;
+        components.(componentName)  = []                    ;   %   Container for object instances
+        choices.(componentName)     = []                    ;   %   Container for object choices
+        isNotBuilt.(componentName)  = true                  ;   %   Build indicators
     end
 
     
     %   Public methods
-    simulation.type   = 'simulation'                                    ;
-    simulation.is     = @(s) strcmpi(s,simulation.type)                 ;
-    simulation.bind   = @(component) bind(component)                    ;
-    simulation.get    = @(component) get(component)                     ;
-    simulation.build  = @(varargin) build(varargin{:})                  ;
-    simulation.evolve = @() evolve()                                    ;
-    simulation.run    = @() evolve()                                    ;
-    simulation.data   = @() getData()                                   ;
+    simulation.type   = 'simulation'                    ;
+    simulation.name   = simulation.type                 ;
+    simulation.is     = @(s) strcmpi(s,simulation.type) ;
+    simulation.named  = @(s) strcmpi(s,simulation.name) ;
+    simulation.bind   = @(component) bind(component)    ;
+    simulation.get    = @(component) get(component)     ;
+    simulation.build  = @(varargin) build(varargin{:})  ;
+    simulation.evolve = @() evolve()                    ;
+    simulation.run    = @() evolve()                    ;
+    simulation.data   = @() getData()                   ;
     
     
     %   Generates a choice list for the passed instance
     simulation.makeChoice = @(instance,key,choices) makeChoice(instance,key,choices);
 
     %   Late module name bind
-    simulation.setBuildModuleName = @(m) setBuildModuleName(m);
+    simulation.setBuildModuleName = @(component,name) setBuildModuleName(component,name);
     
     
     %   Create specific component setters for convenience
-    for component = componentNames
-        simulation.(component{1}).set = @(key,value) components.(component{1}).set(key,value)   ;
-        simulation.(component{1}).get = @()          components.(component{1})                  ;
+    for componentName = componentNames
+        simulation.(componentName{1}).set = @(key,value) set([componentName{1},'.',key],value)  ;
+        simulation.(componentName{1}).get = @()          get(componentName{1})                  ;
     end
     
     
@@ -90,23 +98,31 @@ function simulation = Simulation(moduleName)
     
     
     %   Set object data within given component
-    function [] = setBuildModuleName(component,value)
-        moduleNames.(component) = value;
+    function [] = setBuildModuleName(component,name)
+        moduleNames.(component) = name;
     end
     
     
     
     
     
-    function object = makeChoice(object,key,choices)
+    function object = makeChoice(object,key,choiceList)
         
-        choices = choices(:)';
-        for choice = choices
-            object.choose.(key).(choice{1}) = @() setComponentName(choice{1});
+        choiceList = choiceList(:)';
+        for choice = choiceList
+            object.choose.(key).(choice{1}) = @() setChoiceName(choice{1})  ;
+            object.choice.(key)             = @() getChoice(key)            ;
         end
         
-        function [] = setComponentName(name)
-            names.(key) = name;
+        function [] = setChoiceName(name)
+            choices.(key) = name;
+        end
+        function choice = getChoice(key)
+            if isfield(choices,key)
+                choice = choices.(key);
+            else
+                choice = [];
+            end
         end
         
     end
@@ -120,65 +136,47 @@ function simulation = Simulation(moduleName)
     %                    Build System                     %
     % =================================================== %
     
-    function [] = build()
+    function [] = build(bindAtBuild)
+        
+        if (nargin < 0) || isempty(bindAtBuild)
+            bindAtBuild = true;
+        end
         
         
-        if not(isempty(moduleName)) && not(all(structfun(@(n)isempty(n),names)))
+        if not(isempty(moduleNames)) && not(all(structfun(@(n)isempty(n),choices)))
             
-            for component = componentNames  %#ok<*FXUP>
-                if isNotBuilt.(component{1})
+            if bindAtBuild
+                arguments = {...
+                    {},...
+                    {components.model},...
+                    {components.spacediscretization},...
+                    {components.timediscretization},...
+                    {components.residual},...
+                    {components.residual,components.preconditioner},...
+                    {components.solver,components.residual}};
+            else
+                arguments = {{},{},{},{},{},{},{}};
+            end
+            
+            
+            
+            for k = 1:numel(componentNames)
+                
+                componentName = componentNames{k};
+                
+                if isNotBuilt.(componentName)
+                    module = moduleNames.(componentName);
+                    name   = choices.(componentName)    ;
+                    list   = arguments{k}               ;
+                                      
+                    component = ...
+                        IntrepidTwilight.executive.build(module,name,list{:});
                     
-                    switch(component{1})
-                        case('model')
-                            module    = moduleNames.model            ;
-                            name      = names.spacediscretization   ;
-                            arguments = {}                          ;
-                            
-                        case('spacediscretization')
-                            module     = moduleNames.spacediscretization ;
-                            name       = names.spacediscretization      ;
-                            arguments  = {components.model}             ;
-                            
-                        case('timediscretization')
-                            module     = 'TransientStride'                  ;
-                            name       = names.timediscretization           ;
-                            arguments  = {components.spacediscretization}   ;
-                            
-                        case('residual')
-                            module     = 'executive'                    ;
-                            name       = names.residual                 ;
-                            arguments  = {components.timediscretization};
-                            
-                        case('preconditioner')
-                            module     = 'executive'            ;
-                            name       = names.preconditioner   ;
-                            arguments  = {components.residual}  ;
-                            
-                        case('solver')
-                            module     = 'TenaciousReduction'                           ;
-                            name       = names.solver                                   ;
-                            arguments  = {components.residual,components.preconditioner};
-                            
-                        case('evolver')
-                            module     = 'executive'                            ;
-                            name       = names.evolver                          ;
-                            arguments  = {components.solver,components.residual};
-                            
-                        otherwise
-                            error('IntrepidTwilight:executive:build:UnrecognizedComponent',...
-                                'An unknown component ''%s'' build request.',...
-                                component{1});
-                    end
-                    
-                    
-                    
-                    components.(component{1}) = ...
-                        IntrepidTwilight.executive.build(module,name,arguments{:});
-                    
-                    if isstruct(components.(component{1})) && components.(component{1}).is(component{1})
-                        isNotBuilt.(component{1}) = false;
+                    if isstruct(componentName) && component.is(componentName)
+                        components.(componentName) = component  ;
+                        isNotBuilt.(componentName) = false      ;
                     else
-                        components.(component{1}) = [];
+                        components.(componentName) = [];
                     end
                     
                 end
@@ -189,14 +187,14 @@ function simulation = Simulation(moduleName)
             %   Module is not set
             error('IntrepidTwilight:executive:build:NoModuleNameDefined',...
                 'Component ''%s'' could not be built because module is not specified',...
-                component{1});
+                componentName);
 
         else % not(all(structfun(@(n)isempty(n),names)))
             
             %   All components names must be given
             error('IntrepidTwilight:executive:build:NotAllObjectChosen',...
-                'Component ''%s'' could not be built because not all object names are set',...
-                component{1});
+                'Component ''%s'' could not be built because not all object choices are set',...
+                componentName);
         end
         
         

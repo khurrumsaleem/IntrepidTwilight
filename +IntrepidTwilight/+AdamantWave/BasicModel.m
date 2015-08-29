@@ -1,9 +1,12 @@
 function model = BasicModel()
     
+    model = IntrepidTwilight.executive.Component();
+    model = model.changeID(model,'BasicModel','model');
     
-    values.dimensionalizer.mass     = [];
-    values.dimensionalizer.energy   = [];
-    values.dimensionalizer.momentum = [];
+    
+    model.set('dimensionalizer.mass'    , []);
+    model.set('dimensionalizer.energy'  , []);
+    model.set('dimensionalizer.momentum', []);
 
     
     % ========================================================= %
@@ -11,16 +14,16 @@ function model = BasicModel()
     % ========================================================= %
 
     %   Initial 
-    values.controlVolume.mass            = [];
-    values.controlVolume.energy          = [];
-    values.controlVolume.pressure        = [];
-    values.controlVolume.temperature     = [];
-    values.controlVolume.internalEnergy  = [];
-    values.controlVolume.enthalpy        = [];
-    values.controlVolume.entropy         = [];
-    values.controlVolume.volume          = [];
-    values.controlVolume.source.mass     = @()[];
-    values.controlVolume.source.energy   = @()[];
+    model.set('controlVolume.mass'          , []    );
+    model.set('controlVolume.energy'        , []    );
+    model.set('controlVolume.pressure'      , []    );
+    model.set('controlVolume.temperature'   , []    );
+    model.set('controlVolume.internalEnergy', []    );
+    model.set('controlVolume.enthalpy'      , []    );
+    model.set('controlVolume.entropy'       , []    );
+    model.set('controlVolume.volume'        , []    );
+    model.set('controlVolume.source.mass'   , @()[] );
+    model.set('controlVolume.source.energy' , @()[] );
 
 
     % ========================================================= %
@@ -28,45 +31,26 @@ function model = BasicModel()
     % ========================================================= %
 
     %   Control volume connections
-    values.momentumCell.from = [];
-    values.momentumCell.to   = [];
+    model.set('momentumCell.from', []);
+    model.set('momentumCell.to'  , []);
     
     
     %   Flow direction
-    values.momentumCell.momentum        = [];
-    values.momentumCell.directionX      = [];
-    values.momentumCell.directionY      = [];
-    values.momentumCell.volumeFrom      = [];
-    values.momentumCell.volumeTo        = [];
-    values.momentumCell.LoD             = [];
-    values.momentumCell.source.momentum = @()[];
-    values.momentumCell.source.friction = [];
+    model.set('momentumCell.momentum'       , []    );
+    model.set('momentumCell.directionX'     , []    );
+    model.set('momentumCell.directionY'     , []    );
+    model.set('momentumCell.volumeFrom'     , []    );
+    model.set('momentumCell.volumeTo'       , []    );
+    model.set('momentumCell.LoD'            , []    );
+    model.set('momentumCell.source.momentum', @()[] );
+    model.set('momentumCell.source.friction', []    );
 
 
     %   Interfaces
-    values.interface.up       = [];  %   Upwind volume
-    values.interface.down     = [];  %   Downwind volume
-    values.interface.normalX  = [];  %   Surface normal
-    values.interface.normalY  = [];  %   Surface normal
-    values.interface.flowArea = [];  %   Flow area
-    
-    
-    
+    model.set('interface.up'      , []);  %   Upwind volume
+    model.set('interface.down'    , []);  %   Downwind volume
+    model.set('interface.normalX' , []);  %   Surface normal
+    model.set('interface.normalY' , []);  %   Surface normal
+    model.set('interface.flowArea', []);  %   Flow area
 
-    model.type = 'model';
-    model.is   = @(s) strcmpi(s,model.type);
-    model.set  = @(varargin) set(varargin{:});
-    model.get  = @(varargin) get(varargin{:});
-    
-    function [] = set(key,value)
-        keys   = strsplit(key,'.');
-        values = setfield(values,keys{:},value);
-    end
-    function value = get(varargin)
-        if (nargin == 0)
-            value = values;
-        else
-            value = getfield(values,varargin{:});
-        end
-    end
 end

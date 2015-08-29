@@ -1,50 +1,73 @@
-function jfnk = JFNK(residual,preconditioner)
+function jfnk = JFNK(config)
     
     %   Default parameters
-    jfnk.tolerance.residual       = 1E-7   ;
-    jfnk.tolerance.stepSize       = 1E-7   ;
-    jfnk.maximumIterations        = 100    ;
-    jfnk.epsilon                  = 1E-7   ;
-    jfnk.gmres.iteration.restarts =  1     ;
-    jfnk.gmres.iteration.maximum  = -1     ;
-    jfnk.gmres.tolerance          = 1E-10  ;
-    jfnk.gmres.nu                 = 0.20   ;
-    jfnk.newton.relax.over        = 1.1    ;
+    jfnk = IntrepidTwilight.TenaciousReduction.Solver();
+    jfnk = jfnk.changeID(jfnk,'JFNK');
     
+    %   Parameters
+    jfnk.set('tolerance.residual'      ,  1.0E-7  )   ;
+    jfnk.set('tolerance.stepSize'      ,  1.0E-7  )   ;
+    jfnk.set('maximumIterations'       ,  100.0   )   ;
+    jfnk.set('epsilon'                 ,  1.0E-7  )   ;
+    jfnk.set('gmres.iteration.restarts',     1    )   ;
+    jfnk.set('gmres.iteration.maximum' ,    -1    )   ;
+    jfnk.set('gmres.tolerance'         ,  1.0E-10 )   ;
+    jfnk.set('gmres.nu'                ,    0.2   )   ;
+    jfnk.set('newton.relax.over'       ,    1.1   )   ;
+    %
     %   Hook initializations
-    jfnk.hook.presolve  = @(x) [];
-    jfnk.hook.postsolve = @(x) [];
-    jfnk.hook.prestep   = @(x) [];
-    jfnk.hook.poststep  = @(x) [];
-
-
-
-    %   Bind on construction if passed
-    if (nargin >= 1) && isstruct(residual)
-        bind(residual);
+    jfnk.set('hook.presolve' , @(x) [] );
+    jfnk.set('hook.postsolve', @(x) [] );
+    jfnk.set('hook.prestep'  , @(x) [] );
+    jfnk.set('hook.poststep' , @(x) [] );
+    %
+    %   Overwrite defaults at construction
+    if (nargin >= 1)
+        jfnk.set(config);
     end
-    if (nargin >= 2) && isstruct(preconditioner)
-        bind(preconditioner);
+
+
+
+    %   Dependencies and Binders
+    residual       = []                     ;
+    preconditioner = []                     ;
+    jfnk.bind      = @(object) bind(object) ;
+    %
+    function [] = bind(object)
+        if isstruct(object) && isfield(object,'type')
+            switch(object(1).type)
+                case('residual')
+                    residual = object;
+                case('preconditioner')
+                    preconditioner = object;
+            end
+        end
     end
     
     
     
-    %   Closure variable declarations for GMRES
+    %   Extract parameters from store before solution
+    params       = struct()     ;
+    jfnk.prepare = @() prepare();
+    function [] = prepare()
+        params = jfnk.get();
+    end
+    
+
+    
+    
+    
+    %   Public methods
+    jfnk.solve = @(x) solve(x);
+
+    
+    
+    %   Private variable declarations for GMRES
     Z     = 0   ;   % Update's basis vectors
     H     = 0   ;   % Householder vectors for projections
     R     = 0   ;   % Upper-triangular matrix for least squares problem
     Zeros = 0   ;   % Persistent Zero matrix
     alpha = 0   ;   % Vector of projected residuals
-    
-    
-    
-    %   Public methods
-    jfnk.type  = 'solver'                   ;
-    jfnk.is    = @(s) strcmpi(s,jfnk.type)  ;
-    jfnk.set   = @(key,value) set(key,value);
-    jfnk.bind  = @(object) bind(object)     ;
-    jfnk.solve = @(x) solve(x)              ;
-    
     
     
     % ================================================================= %
@@ -57,11 +80,11 @@ function jfnk = JFNK(residual,preconditioner)
         nRows = numel(x);
         
         %   Determine column count
-        if (jfnk.gmres.iteration.maximum == -1)
-            nCols                        = nRows;
-            jfnk.gmres.iteration.maximum = nCols;
+        if (params.gmres.iteration.maximum == -1)
+            nCols                          = nRows;
+            params.gmres.iteration.maximum = nCols;
         else
-            nCols = jfnk.gmres.iteration.maximum;
+            nCols = params.gmres.iteration.maximum;
         end
         
         %   Allocate
@@ -78,30 +101,6 @@ function jfnk = JFNK(residual,preconditioner)
     
     
     
-    
-    % ================================================================= %
-    %                       Mutators/Re-binders                         %
-    % ================================================================= %
-    function [] = bind(object)
-        if isstruct(object)
-            switch(object(1).type)
-                case('residual')
-                    residual = object;
-
-                case('preconditioner')
-                    preconditioner = object;
-            end
-        end
-    end
-    function [] = set(key,value)
-        keys = strsplit(key,'.')                ;
-        jfnk = setfield(jfnk,{1},keys{:},value) ;
-    end
-    
-    
-    
-    
-    
     % ================================================================= %
     %                    Fully-Coupled Solver                           %
     % ================================================================= %
@@ -112,28 +111,25 @@ function jfnk = JFNK(residual,preconditioner)
         if arraysAreNotAllocated
             allocateWorkArrays(xNL);
         end
-        
-        
-        % Hook
-        
-        
+
+
         % ----------------------------------------------- %
         %                Non-Linear Iterations            %
         % ----------------------------------------------- %
         
         %   Hook
-        jfnk.hook.presolve(xNL);
+        params.hook.presolve(xNL);
 
 
         %   Allocate stats struct
-        stats.iterations                     = 0;
-        stats.norm(jfnk.maximumIterations,1) = 0;
+        stats.iterations                       = 0;
+        stats.norm(params.maximumIterations,1) = 0;
 
         %   Initialize
         [xNL,rNL]     = residual.guard.state(xNL)           ;
         rNLnorm       = norm(rNL,2)                         ;
         stats.norm(1) = rNLnorm                             ;
-        notConverged  = rNLnorm > jfnk.tolerance.residual   ;
+        notConverged  = rNLnorm > params.tolerance.residual ;
         preconditioner.initialize(xNL)                      ;
         
         
@@ -141,7 +137,10 @@ function jfnk = JFNK(residual,preconditioner)
         while notConverged
             
             %   Hook
-            jfnk.hook.prestep(xNL);
+            fallback = params.hook.prestep(xNL);
+            if fallback
+                return;
+            end
 
 
             %   Evaluate initial residual
@@ -162,19 +161,19 @@ function jfnk = JFNK(residual,preconditioner)
 
 
             %   Iteration clean-up
-            normNotDone            =     rNLnorm      >= jfnk.tolerance.residual            ;
-            stepNotDone            =      dxNorm      >= jfnk.tolerance.stepSize            ;
-            belowMaximumIterations = stats.iterations <= jfnk.maximumIterations             ;
+            normNotDone            =     rNLnorm      >= params.tolerance.residual            ;
+            stepNotDone            =      dxNorm      >= params.tolerance.stepSize            ;
+            belowMaximumIterations = stats.iterations <= params.maximumIterations             ;
             notConverged           = (normNotDone || stepNotDone) && belowMaximumIterations ;
 
 
             % Hook
-            jfnk.hook.poststep(xNL);
+            params.hook.poststep(xNL);
             
         end
         
         % Hook
-        jfnk.hook.postsolve(xNL);
+        params.hook.postsolve(xNL);
         
         
         %   Contract vector to the number of actuall iterations
@@ -231,29 +230,29 @@ function jfnk = JFNK(residual,preconditioner)
             alphaMin = ...
                 IntrepidTwilight.ConvenientMeans.goldenSectionMinimizeLazily(...
                     @(alpha) norm(residual.value(xOld - alpha*dx),2),...
-                        [0,1],[rOldNorm,rNewNorm],0.01);
+                        [0,1],[rOldNorm,rNewNorm],0.01)     ;
             rNew     = residual.value(xOld - alphaMin*dx)   ;
             rNewNorm = norm(rNew,2)                         ;
             dx       = alphaMin*dx                          ;
             
             
         else
-            
+             
             % Over-relaxation
             reduced    = not(notReduced);
             rTrack     = rNew           ;
             rNormTrack = rNewNorm       ;
             while reduced
-                dx         = jfnk.newton.relax.over * dx        ;
-                rNew       = residual.value(xOld - dx)   ;
+                dx         = params.newton.relax.over * dx      ;
+                rNew       = residual.value(xOld - dx)          ;
                 rNewNorm   = norm(rNew,2)                       ;
                 reduced    = rNewNorm < 0.9*rNormTrack          ;
                 rTrack     = rNew*reduced + rTrack*(1-reduced)  ;
                 rNormTrack = norm(rTrack,2)                     ;
             end
-            rNew     = rTrack                   ;
-            rNewNorm = rNormTrack               ;
-            dx       = dx/jfnk.newton.relax.over;
+            rNew     = rTrack                       ;
+            rNewNorm = rNormTrack                   ;
+            dx       = dx/params.newton.relax.over  ;
             
         end
         
@@ -274,11 +273,11 @@ function jfnk = JFNK(residual,preconditioner)
     %   Outer "Restart" Iterations
     function dx = GMRES(xk,rk,rkNorm)
         dx = 0;
-        for k = 1:jfnk.gmres.iteration.restarts
+        for k = 1:params.gmres.iteration.restarts
             xk             = xk + dx                ;
             [dx,rk,rkNorm] = GMRESCore(xk,rk,rkNorm);
             
-            if rkNorm <= jfnk.gmres.tolerance
+            if rkNorm <= params.gmres.tolerance
                 break;
             end
         end
@@ -288,9 +287,9 @@ function jfnk = JFNK(residual,preconditioner)
     function [dx,rk,rkNorm] = GMRESCore(xk,rk0,rk0Norm)
         
         %   Create shortcuts for closure variables
-        nu              = jfnk.gmres.nu         ;
-        linearTolerance = jfnk.gmres.tolerance  ;
-        epsilon         = jfnk.epsilon          ;
+        nu              = params.gmres.nu         ;
+        linearTolerance = params.gmres.tolerance  ;
+        epsilon         = params.epsilon          ;
         n               = numel(xk)             ;
         I               = 1:n                   ;
         
@@ -325,7 +324,7 @@ function jfnk = JFNK(residual,preconditioner)
         rkNorm   = norm(rk,2)   ;
         
         
-        for k = 2:jfnk.gmres.iteration.maximum
+        for k = 2:params.gmres.iteration.maximum
             
             % Choose the next basis vector
             if rkNorm <= nu*rkm1Norm

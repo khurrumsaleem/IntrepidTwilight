@@ -1,29 +1,16 @@
-function sd = SpaceDiscretization(model)
+function sd = SpaceDiscretization(~)
 
     %   Inherit and overwrite ID information
-    sd         = IntrepidTwilight.executive.Object()   ;
-    sd.type    = 'spaceDiscretization'                 ;
-    sd.is      = @(s) strcmpi(s,sd.type)               ;
+    sd = IntrepidTwilight.executive.Component() ;
+    sd = sd.changeID(sd,'spaceDiscretization','spaceDiscretization');
     
     
-    %   Bind/Retrieve model value
-    sd.bind     = @(m) bind(m)  ;
-    sd.retrieve = @() retrieve();
-    %
-    function [] = bind(m)
-        model = m;
-    end
-    function m = retrieve()
-        m = model;
-    end
+%     %   Binder
+%     model   = [] ; 
+%     sd.bind = @(m) bind(m)  ;
+%     function [] = bind(m)
+%         model = m;
+%     end
 
-
-
-    %   Handle argument
-    if (nargin > 0) && isstruct(model) && model.is('model');
-        bind(model);
-    else
-        bind([]);
-    end
 
 end

@@ -1,57 +1,69 @@
-function evolver = Evolver(Solver,Residual)
-    
-    
-    %   Bind at construction
-    if (nargin >= 1) && not(isempty(Solver))
-        bind(Solver);
-    else
-        solver = [];
+function evolver = Evolver(config)
+
+    %   Inherit
+    evolver = IntrepidTwilight.executive.Component();
+    evolver = evolver.changeID(evolver,'evolver','evolver');
+
+    %   Set default values
+    evolver.set('time.span'        , [0,1]  );
+    evolver.set('time.step.maximum', 1      );
+    evolver.set('time.step.minimum', 0      );
+    evolver.set('time.step.goal'   , 0.1    );
+    evolver.set('initialCondition' , 0      );
+    evolver.set('saveRate'         , 0.1    );
+    %
+    %   Overwrite defaults at construction
+    if (nargin >= 1)
+        evovler.set(config);
     end
-    if (nargin >= 2) && not(isempty(Residual))
-        bind(Residual);
-    else
-        residual = [];
-    end
+    
     
 
-    %   Add the finalized problem and other fields
-    evolver.time.span         = [0,1];
-    evolver.time.step.maximum = 1    ;
-    evolver.time.step.minimum = 0    ;
-    evolver.time.step.goal    = 0.1  ;
-    evolver.initialCondition  = 0    ;
-    evolver.saveRate          = 0.1  ;
+    %   Dependencies and Binder
+    evolver.dependencies = {'residual','solver'}    ;
+    evolver.bind         = @(object) bind(object)   ;
+    %
+    function [] = bind(object)
+        if isstruct(object)
+            switch(object(1).type)
+                case('residual')
+                    residual = object;
+                case('solver')
+                    solver = object;
+            end
+        end
+    end
+
+
+    %   Public methods
+    evolver.run     = @() evolve()  ;
+    evolver.evolve  = @() evolve()  ;
+    evolver.getData = @() getData() ;
     
-    evolver.type    = 'evolver'                         ;
-    evolver.is      = @(s) strcmpi(s,'evolver')         ;
-    evolver.bind    = @(type,object) bind(type,object)  ;
-    evolver.set     = @(varargin) set(varargin{:})      ;
-    evolver.run     = @() evolve()                      ;
-    evolver.evolve  = @() evolve()                      ;
-    evolver.getData = @() getData()                     ;
-    
-    %   Initialize closure variables
-    times  = 0;
-    values = 0;
+    %   Initialize private variables
+    residual = []   ;
+    solver   = []   ;
+    times    = []   ;
+    values   = []   ;
     
     
     function [] = evolve()
         
         %   Create time save vector
-        tStart   = evolver.time.span(1)     ;
-        tFinish  = evolver.time.span(2)     ;
-        saveRate = evolver.saveRate         ;
-        dt       = evolver.time.step.goal   ;
-        t        = tStart                   ;
+        tSpan    = evolver.get('time.span')     ;
+        saveRate = evolver.get('saveRate')      ;
+        dt       = evolver.get('time.step.goal');
+        t        = tSpan(1)                     ;
         
-        times = (tStart:saveRate:tFinish)';
-        if (times ~= tFinish)
-            times = [times ; tFinish];
+        times = (tSpan(1):saveRate:tSpan(2))';
+        if (times ~= tSpan(2))
+            times = [times ; tSpan(2)];
         end
         
         
         %   Initialize data
-        values = evolver.initialCondition(:,ones(1,numel(times)));
+        IC     = evolver.get('initialCondition');
+        values = IC(:,ones(1,numel(times)));
         value  = values(:,1);
         
         %   Save index
@@ -69,7 +81,7 @@ function evolver = Evolver(Solver,Residual)
             else
                 step     = times(k) - t ;
                 saveData = true         ;
-            end           
+            end
 
 
 
@@ -85,7 +97,7 @@ function evolver = Evolver(Solver,Residual)
             %   Store
             if saveData
                 values(:,k) = q;
-                k          = k + 1;
+                k           = k + 1;
             end
 
             %   Print statistics
@@ -99,26 +111,6 @@ function evolver = Evolver(Solver,Residual)
     function [t,q] = getData()
         t = times;
         q = values;
-    end
-    
-    
-    function [] = set(key,value)
-        keys    = strsplit(key,'.');
-        evolver = setfield(evolver,keys{:},value);
-    end
-    
-    
-    %   Late binder
-    function [] = bind(object)
-        if isstruct(object)
-            switch(object(1).type)
-                case('residual')
-                    residual = object;
-
-                case('solver')
-                    solver = object;
-            end
-        end
     end
     
     

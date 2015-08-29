@@ -11,16 +11,18 @@ function ts = SimpleTemporalDiscretization(spatialDiscretization)
         sd = spatialDiscretization ;
     end
 
-    %   Methods
-    ts.type                  = 'timediscretization'             ;
-    ts.is                    = @(s) strcmpi(s,ts.type)          ;
-    ts.set                   = @(type,object) set(type,object)  ;
-    ts.qStar                 = @(q) qStar(q)                    ;
-    ts.update                = @(q,t,dt) update(q,t,dt)         ;
-    ts.qLast                 = @() getQLast()                   ;
-    ts.qStore                = @() getQStore()                  ;
-    ts.jacobian              = @(q) jacobian(q)                 ;
-    ts.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q)    ;
+    %   Inherit
+    ts = IntrepidTwilight.executive.Component();
+    ts = ts.changeID(ts,'impliciteuler','timediscretization');
+
+    %   Implementation methods
+    ts.bind                  = @(sd) bind(sd)               ;
+    ts.qStar                 = @(q) qStar(q)                ;
+    ts.update                = @(q,t,dt) update(q,t,dt)     ;
+    ts.qLast                 = @() getQLast()               ;
+    ts.qStore                = @() getQStore()              ;
+    ts.jacobian              = @(q) jacobian(q)             ;
+    ts.blockDiagonalJacobian = @(q) blockDiagonalJacobian(q);
 
 
     %   Imbalance value
@@ -31,12 +33,9 @@ function ts = SimpleTemporalDiscretization(spatialDiscretization)
 
 
     %   Late bind
-    function [] = set(type,object)
-        switch(lower(type))
-            case('spacediscretization')
-                if isstruct(object) && object.is('spacediscretization')
-                    sd = object;
-                end
+    function [] = bind(object)
+        if isstruct(object) && object.is('spacediscretization')
+            sd = object;
         end
     end
 

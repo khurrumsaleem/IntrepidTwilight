@@ -1,32 +1,51 @@
-function pc = Preconditioner(residual,kind)
-    
-    %   Closure variables
-    r    = []   ;
-    drdq = []   ;
-    
+function pc = Preconditioner(config)
     
     %   Instantiate struct
-    pc.type    = 'preconditioner'       ;
-    pc.is      = @(s) strcmpi(s,pc.type);
-    pc.get     = @()  get()             ;
-    pc.bind    = @(object) bind(object) ;
-    pc.setKind = @(s) setKind(s)        ;
-    
-    
-    %   Bind at construction
+    pc = IntrepidTwilight.executive.Component();
+    pc = pc.changeID(pc,'preconditioner','preconditioner');
+
+
+
+    %   Set defaults
+    pc.set('kind','none');
+    %
+    %   Overwrite defaults at construction
     if (nargin >= 1)
-        bind(residual);
+        pc.set(config);
     end
-    if (nargin >= 2) && not(isempty(kind))
-        bindMethods();
+
+
+
+    %   Dependencies and Binder
+    r               = []                    ;
+    drdq            = []                    ;
+    pc.dependencies = {'residual'}          ;
+    pc.bind         = @(object) bind(object);
+    %
+    function [] = bind(object)
+        if isstruct(object) && object.is('residual')
+            r = object;
+        end
     end
-    
-    
-    
-    function [] = bindMethods()
-        
+
+
+
+    %   Prepare for solution
+    pc.prepare = @() prepare();
+    %
+    function [] = prepare()
         if r.is('residual')
-            switch(lower(kind))
+            bindMethods();
+        else
+            error('IntrepidTwilight:executive:Preconditioner:noResidual',...
+                'Preconditioner does not have a residual bound to it.');
+        end
+    end
+
+
+    function [] = bindMethods()
+
+        switch(lower(pc.get('kind')))
                 
                 case('full-stagnant')
                     pc.apply      = @(q) applyFullJacobian(q)        ;
@@ -45,33 +64,11 @@ function pc = Preconditioner(residual,kind)
                     pc.initialize = @(q) []  ;
                     pc.update     = @(q) []  ;
                     
-            end
         end
+
     end
     
-    % ======================================================================= %
-    %                                Re-binders                               %
-    % ======================================================================= %
-    function [] = bind(object)
-        
-        if isstruct(object)
-            if object(1).is('residual')
-                r = object;
-            end
-        end
-    end
-    function [] = setKind(newKind)
-        if (nargin >= 1) && ischar(newKind)
-            kind = newKind;
-            bindMethods();
-        else
-        end
-    end
-    function j = get()
-        j = drdq;
-    end
-    
-    
+   
     % ======================================================================= %
     %                         Block-Jacobi functions                          %
     % ======================================================================= %
