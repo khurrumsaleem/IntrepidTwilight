@@ -17,8 +17,8 @@ function [xNL,varargout] = JFNKlegacy(x0,r,epsilon,constraint,preconditioner)
     end
     
     % Tolerances
-    LinearTolerance    = 1E-13;
-    NonlinearTolerance = 1E-6 ;
+    LinearTolerance    = 1E-15;
+    NonlinearTolerance = 1E-15;
 
     % Matrix allocation
     Z(N,Nmax) = 0   ;   % Update's basis vectors
@@ -40,7 +40,7 @@ function [xNL,varargout] = JFNKlegacy(x0,r,epsilon,constraint,preconditioner)
     % ================================================================= %
     
     % Let x = x0
-    xNL     = x0;
+    xNL = x0;
     
     %   Relax the step size for a physical solution
     relaxor = 0.999;
@@ -82,12 +82,9 @@ function [xNL,varargout] = JFNKlegacy(x0,r,epsilon,constraint,preconditioner)
         % Backtracker
         rNLnew     = r(xNL + dx)            ;
         rNormNLnew = norm(rNLnew,2)         ;
-        notDone    = rNormNLnew > rNormNL   ;
-        while notDone
-            dx         = relaxor * dx;
-            rNLnew     = r(xNL + dx);
-            rNormNLnew = norm(rNLnew,2);
-            notDone    = (rNormNLnew > rNormNL) && max(abs(dx)) > 1E-12;
+        if (rNormNLnew > rNormNL)
+           [dx,rNormNLnew] = ...
+               inexactLineSearch(xNL,dx,rNormNL,rNormNLnew);
         end
         xNL  = xNL + dx ;   % Calculate relaxed x value
 
@@ -203,6 +200,48 @@ function [xNL,varargout] = JFNKlegacy(x0,r,epsilon,constraint,preconditioner)
         dx = Z(:,1:k) * yk                  ;   % Calculate full Newton update
         dx = preconditioner.apply(dx)       ;
     end
+    
+    
+    
+    % ================================================================= %
+    %                       Inexact Line Search                         %
+    % ================================================================= %
+    function [dx,ralpha] = inexactLineSearch(x0,dx,r0,rbeta)
+        
+        %   Quadratic optimum
+        sbeta  = 1                                          ;
+        salpha = (sbeta^2*r0)/(2*(sbeta * r0 + rbeta - r0)) ;
+        dx     = salpha*dx                                  ;
+        ralpha = norm(r(x0 + dx))                           ;
+        
+        while (norm(ralpha) > norm(r0)) || (abs(sbeta-salpha)<100*eps())
+            % Reassign for recursion
+            rgamma = rbeta  ;
+            sgamma = sbeta  ;
+            rbeta  = ralpha ;
+            sbeta  = salpha ;
+            
+            %   Cubic coefficients
+            denom = sbeta^2  * sgamma^2 * (sbeta-sgamma)    ;
+            num1  = sbeta^2  * ( rgamma + r0*(sgamma - 1) ) ;
+            num2  = sgamma^2 * ( rbeta  + r0*(sbeta  - 1) ) ;
+            c     = -r0;
+            b     =  2 * ( sbeta*num1 - sgamma*num2 )/denom;
+            a     = -3 * (       num1 -        num2 )/denom;
+            
+            %   Cubic optimums
+            opt    = (-b-sign(b)*sqrt(b^2-4*a*c))/(2*a) ;
+            opts   = [opt,c/(a*opt)]                    ;
+            salpha = opts(opts<1 & opts>0)              ;
+            dx     = salpha*dx                          ;
+            ralpha = norm(r(x0 + dx))                   ;
+        end
+
+    end
+    
+    
+    
+    
 end
 
 function s = Signum(s)

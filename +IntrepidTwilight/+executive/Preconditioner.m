@@ -3,9 +3,9 @@ function pc = Preconditioner(config)
     %   Instantiate struct
     pc = IntrepidTwilight.executive.Component();
     pc = pc.changeID(pc,'preconditioner','preconditioner');
-
-
-
+    
+    
+    
     %   Set defaults
     pc.set('kind','none');
     %
@@ -13,13 +13,13 @@ function pc = Preconditioner(config)
     if (nargin >= 1)
         pc.set(config);
     end
-
-
-
+    
+    
+    
     %   Dependencies and Binder
     r               = []                    ;
     drdq            = []                    ;
-    pc.dependencies = {'residual'}          ;
+    pc.set('dependencies',{'residual'})     ;
     pc.bind         = @(object) bind(object);
     %
     function [] = bind(object)
@@ -27,48 +27,68 @@ function pc = Preconditioner(config)
             r = object;
         end
     end
-
-
-
+    
+    
+    
     %   Prepare for solution
-    pc.prepare = @() prepare();
-    %
-    function [] = prepare()
-        if r.is('residual')
-            bindMethods();
-        else
-            error('IntrepidTwilight:executive:Preconditioner:noResidual',...
-                'Preconditioner does not have a residual bound to it.');
+    pc.prepare    = @(varargin) prepare(varargin{:});
+    isNotPrepared = true;
+    function [] = prepare(varargin)
+        if isNotPrepared
+            if r.is('residual')
+                bindMethods();
+            else
+                error('IntrepidTwilight:executive:Preconditioner:noResidual',...
+                    'Preconditioner does not have a residual bound to it.');
+            end
+            isNotPrepared = false;
         end
-    end
-
-
-    function [] = bindMethods()
-
-        switch(lower(pc.get('kind')))
-                
-                case('full-stagnant')
-                    pc.apply      = @(q) applyFullJacobian(q)        ;
-                    pc.initialize = @(q) initializeFullJacobian(q)   ;
-                    pc.update     = @(q) []                          ;
-                    
-                    
-                case('block-jacobi')
-                    pc.apply      = @(q) applyBlockJacobi(q)     ;
-                    pc.initialize = @(q) updateBlockJacobi(q)    ;
-                    pc.update     = @(q) updateBlockJacobi(q)    ;
-                    
-                    
-                case('none')
-                    pc.apply      = @(q) q   ;
-                    pc.initialize = @(q) []  ;
-                    pc.update     = @(q) []  ;
-                    
-        end
-
     end
     
-   
+    
+    
+    %   Define dynamic method binding interface
+    apply_        = [];
+    initialize_   = [];
+    update_       = [];
+    pc.apply      = @(q) apply(q);
+    pc.initialize = @(q) initialize(q);
+    pc.update     = @(q) update(q);
+    function out = apply(q)
+        out = apply_(q);
+    end
+    function [] = initialize(q)
+        initialize_(q);
+    end
+    function [] = update(q)
+        update_(q);
+    end
+    
+    
+    
+    %   Define run-time binder
+    function [] = bindMethods()
+        
+        switch(lower(pc.get('kind')))
+            case('full-stagnant')
+                apply_      = @(q) applyFullJacobian(q)        ;
+                initialize_ = @(q) initializeFullJacobian(q)   ;
+                update_     = @(q) []                          ;
+                
+            case('block-jacobi')
+                apply_      = @(q) applyBlockJacobi(q)     ;
+                initialize_ = @(q) updateBlockJacobi(q)    ;
+                update_     = @(q) updateBlockJacobi(q)    ;
+                
+            case('none')
+                apply_      = @(q) q   ;
+                initialize_ = @(q) []  ;
+                update_     = @(q) []  ;
+        end
+        
+    end
+    
+    
     % ======================================================================= %
     %                         Block-Jacobi functions                          %
     % ======================================================================= %

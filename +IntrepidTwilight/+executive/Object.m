@@ -22,8 +22,8 @@ function object = Object()
     
 
     %   Key-store system
-    object.set  = @(key,value) set(key,value)   ;
-    object.get  = @(varargin)  get(varargin{:}) ;
+    object.set  = @(key,varargin) set(key,varargin{:})  ;
+    object.get  = @(varargin)  get(varargin{:})         ;
     
     store = struct();
     

@@ -3,7 +3,7 @@ function J = numericalJacobianFull(f,x0,epsilons)
     
     if (nargin < 3) || isempty(epsilons)
         aboveOne = abs(x0) >= 1;
-        epsilons = 1E-9 * (x0.*aboveOne + not(aboveOne));
+        epsilons = 1E-7 * (x0.*aboveOne + not(aboveOne));
     end
     
     Nvars       = length(x0);

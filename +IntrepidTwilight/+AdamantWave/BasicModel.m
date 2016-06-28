@@ -1,4 +1,4 @@
-function model = BasicModel()
+function model = BasicModel(config)
     
     model = IntrepidTwilight.executive.Component();
     model = model.changeID(model,'BasicModel','model');
@@ -7,6 +7,7 @@ function model = BasicModel()
     model.set('dimensionalizer.mass'    , []);
     model.set('dimensionalizer.energy'  , []);
     model.set('dimensionalizer.momentum', []);
+    model.set('dimensionalizer.volume'  , []);
 
     
     % ========================================================= %
@@ -22,6 +23,7 @@ function model = BasicModel()
     model.set('controlVolume.enthalpy'      , []    );
     model.set('controlVolume.entropy'       , []    );
     model.set('controlVolume.volume'        , []    );
+    model.set('controlVolume.isElastic'     , []    );
     model.set('controlVolume.source.mass'   , @()[] );
     model.set('controlVolume.source.energy' , @()[] );
 
@@ -36,14 +38,14 @@ function model = BasicModel()
     
     
     %   Flow direction
-    model.set('momentumCell.momentum'       , []    );
-    model.set('momentumCell.directionX'     , []    );
-    model.set('momentumCell.directionY'     , []    );
-    model.set('momentumCell.volumeFrom'     , []    );
-    model.set('momentumCell.volumeTo'       , []    );
-    model.set('momentumCell.LoD'            , []    );
-    model.set('momentumCell.source.momentum', @()[] );
-    model.set('momentumCell.source.friction', []    );
+    model.set('momentumCell.momentum'           , []    );
+    model.set('momentumCell.directionX'         , []    );
+    model.set('momentumCell.directionY'         , []    );
+    model.set('momentumCell.volumeFractionFrom' , []    );
+    model.set('momentumCell.volumeFractionTo'   , []    );
+    model.set('momentumCell.LoD'                , []    );
+    model.set('momentumCell.source.momentum'    , @()[] );
+    model.set('momentumCell.source.friction'    , []    );
 
 
     %   Interfaces
@@ -52,5 +54,9 @@ function model = BasicModel()
     model.set('interface.normalX' , []);  %   Surface normal
     model.set('interface.normalY' , []);  %   Surface normal
     model.set('interface.flowArea', []);  %   Flow area
+    
+    if (nargin > 0) && isstruct(config)
+        model.set(config);
+    end
 
 end

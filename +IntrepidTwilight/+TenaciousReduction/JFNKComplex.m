@@ -1,18 +1,18 @@
-function jfnk = JFNK(config)
+function jfnk = JFNKComplex(config)
     
     %   Default parameters
     jfnk = IntrepidTwilight.TenaciousReduction.Solver();
     jfnk = jfnk.changeID(jfnk,'JFNK');
     
     %   Parameters
-    jfnk.set('tolerance.residual'      ,  1.0E-6  )   ;
-    jfnk.set('tolerance.stepSize'      ,  1.0E-6  )   ;
-    jfnk.set('maximumIterations'       ,  100     )   ;
-    jfnk.set('epsilon'                 ,  1.0E-7  )   ;
+    jfnk.set('tolerance.residual'      ,  1.0E-7  )   ;
+    jfnk.set('tolerance.stepSize'      ,  1.0E-7  )   ;
+    jfnk.set('maximumIterations'       ,  100.0   )   ;
+    jfnk.set('epsilon'                 ,  1.0E-12 )   ;
     jfnk.set('gmres.iteration.restarts',     1    )   ;
     jfnk.set('gmres.iteration.maximum' ,    -1    )   ;
     jfnk.set('gmres.tolerance'         ,  1.0E-10 )   ;
-    jfnk.set('gmres.nu'                ,    0.90  )   ;
+    jfnk.set('gmres.nu'                ,    0.2   )   ;
     jfnk.set('newton.relax.over'       ,    1.1   )   ;
 
 
@@ -54,22 +54,17 @@ function jfnk = JFNK(config)
 
 
     %   Extract parameters from store
-    jfnk.prepare  = @(varargin) prepare(varargin{:});
-    params        = struct()     ;
-    isNotPrepared = true;
+    params       = struct()     ;
+    jfnk.prepare = @(varargin) prepare(varargin{:});
     function [] = prepare(varargin)
-        if isNotPrepared
-            
-            %   Preparation cascade
-            residual.prepare(varargin{:});
-            preconditioner.prepare();
-            
-            %   Pull parameters
-            params = jfnk.get();
-            
-            isNotPrepared = false;
+        
+        %   Preparation cascade
+        residual.prepare(varargin{:});
+        preconditioner.prepare();
+        
+        %   Pull parameters
+        params = jfnk.get();
 
-        end
     end
     
     
@@ -246,18 +241,18 @@ function jfnk = JFNK(config)
     function [xNL,rNLnorm,dxNorm] = nonlinearStep(xNLm1,rNLm1,rNLnorm)
         
         %   Advance in a descent direction
-        [xNL,~,rNLnorm,dxNorm] = quasiNewtonUpdate(xNLm1,rNLm1,rNLnorm);
+        [xNL,rNL,rNLnorm,dxNorm] = quasiNewtonUpdate(xNLm1,rNLm1,rNLnorm);
         
         
-%         %   Extrapolate solution
-%         dxExtrap    = rNL .* (xNL - xNLm1)./(rNL - rNLm1 + eps(rNLm1));
-%         xExtrap     = xNL - dxExtrap            ;
-%         rExtrap     = residual.value(xExtrap)   ;
-%         rExtrapNorm = norm(rExtrap,2)           ;
-%         if rExtrapNorm < 0.9*rNLnorm
-%             xNL     = xExtrap       ;
-%             rNLnorm = rExtrapNorm   ;
-%         end
+        %   Extrapolate solution
+        dxExtrap    = rNL .* (xNL - xNLm1)./(rNL - rNLm1 + eps(rNLm1));
+        xExtrap     = xNL - dxExtrap            ;
+        rExtrap     = residual.value(xExtrap)   ;
+        rExtrapNorm = norm(rExtrap,2)           ;
+        if rExtrapNorm < 0.9*rNLnorm
+            xNL     = xExtrap       ;
+            rNLnorm = rExtrapNorm   ;
+        end
         
     end
 
@@ -274,12 +269,37 @@ function jfnk = JFNK(config)
         dx = GMRES(xOld,rOld,rOldNorm);
 
         %   Allow adjustment of the step size through user-defined function
-        dx       = residual.guard.step(xOld,dx) ;
-        rNew     = residual.value(xOld - dx)    ;
-        rNewNorm = norm(rNew,2)                 ;
+        dx   = residual.guard.step(xOld,dx) ;
+        rNew = residual.value(xOld - dx)    ;
+
+        %   Set-up
+        rNewNorm   = norm(rNew,2)       ;
+        notReduced = rNewNorm > rOldNorm;
         
-         if (rNewNorm > rOldNorm)
+        
+         if notReduced
+            
+            %   Under-relaxtion
             [dx,rNewNorm] = inexactLineSearch(xOld,dx,rOldNorm,rNewNorm);
+            
+        else
+            
+%             % Over-relaxation
+%             reduced    = not(notReduced);
+%             rTrack     = rNew           ;
+%             rNormTrack = rNewNorm       ;
+%             while reduced
+%                 dx         = params.newton.relax.over * dx      ;
+%                 rNew       = residual.value(xOld - dx)          ;
+%                 rNewNorm   = norm(rNew,2)                       ;
+%                 reduced    = rNewNorm < 0.9*rNormTrack          ;
+%                 rTrack     = rNew*reduced + rTrack*(1-reduced)  ;
+%                 rNormTrack = norm(rTrack,2)                     ;
+%             end
+%             rNew     = rTrack                       ;
+%             rNewNorm = rNormTrack                   ;
+%             dx       = dx/params.newton.relax.over  ;
+            
         end
         
         % Calculate relaxed x value
@@ -327,7 +347,7 @@ function jfnk = JFNK(config)
         % First Step (k = 1)
         % Compute J*z1 and store in R
         w      = preconditioner.apply(Z(:,1));
-        R(:,1) = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
+        R(:,1) = imag(residual.value(xk + 1i*epsilon*w))/epsilon;
         
         % Compute Householder vector to bring R(:,1) into upper triangular form
         e      = [1 ; Zeros(1:n-1)]                 ;
@@ -361,8 +381,8 @@ function jfnk = JFNK(config)
             end
             
             % Compute and store A*zk in R
-            w      = preconditioner.apply(Z(:,k))                       ;
-            R(:,k) = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
+            w      = preconditioner.apply(Z(:,k))                   ;
+            R(:,k) = imag(residual.value(xk + 1i*epsilon*w))/epsilon;
             
             % Apply all previous projections to new the column
             for m = 1:k-1
@@ -453,7 +473,7 @@ function jfnk = JFNK(config)
 
         %   Cubic optimum
         iter = 0;
-        while (ralpha > r0) && (abs(sbeta-salpha)>100*eps())
+        while (ralpha > r0) || (abs(sbeta-salpha)<100*eps())
 
             % Reassign for recursion
             rgamma = rbeta  ;

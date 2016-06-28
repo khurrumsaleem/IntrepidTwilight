@@ -22,7 +22,10 @@ function default = merge(default,new)
                 default.(newField) = merge(default.(newField),new.(newField));
                 
             end
-
+        else
+            
+            default.(newField) = new.(newField);
+            
         end
     end
 end

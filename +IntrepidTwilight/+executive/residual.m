@@ -3,11 +3,11 @@ function r = Residual(config)
     %   Inherit and setup
     r = IntrepidTwilight.executive.Component();
     r = r.changeID(r,'residual','residual');
-    r.dependencies = {'timediscretization'};
 
 
     %   Binder
     ts     = [];
+    r.set('dependencies',{'timediscretization'});
     r.bind = @(object) bind(object);
     function [] = bind(object)
         if isstruct(object) && object.is('timediscretization')
@@ -16,9 +16,18 @@ function r = Residual(config)
     end
 
 
+    %   Expansion point
+    expansionPoint   = [];
+    r.expansionPoint = @() getExpansionPoint();
+    function q = getExpansionPoint()
+        q = expansionPoint;
+    end
+
+
     %   Residual value
     r.value = @(q) value(q);
     function r = value(q)
+        expansionPoint = q;
         r = q - ts.qStar(q);
     end
 
@@ -41,45 +50,49 @@ function r = Residual(config)
         dfdq = ts.jacobian(q)           ;
         drdq = eye(size(dfdq)) - dfdq   ;
     end
-
-
-    %   Default guard
-    r.guard.step  = @(q,dq) guardStep(q,dq) ;
-    r.guard.state = @(q)    guardState(q)   ;
-    r.set('guard.state',@(r,q)   simpleBacktracker(r,q));
-    r.set('guard.step' ,@(r,q,dq)simpleBacktracker(r,q,dq));
+    
+    
+    
+    
+    
     %
-    %   Wraps r in the closure which is passed to the, possibly user-defined, guards
-    function [dq,rValue] = guardStep(q,dq)       
-        guard = r.get('guard.step');
-        [dq,rValue] = guard(r,q,dq);
-    end
-    function [q,rValue] = guardState(q)
-        guard = r.get('guard.state');
-        [q,rValue] = guard(r,q);
-    end
-    %
-    %   Only looks for NaNs and relaxs the value
-    function [qValue,rValue] = simpleBacktracker(r,q,dq)
-        switch(nargin)
-            case(2)
-                %   State
-                rValue = r(q);
-                while any(isnan(rValue))
-                    q      = 0.9*q  ;
-                    rValue = r(q)   ;
-                end
-                qValue = q;
-            case(3)
-                    %   Step
-                rValue = r(q-dq);
-                while any(isnan(rValue))
-                    dq     = 0.5*dq     ;
-                    rValue = r(q - dq)  ;
-                end
-                qValue = dq;
+    %   Prepare:
+    %       Bind step and value functions
+    r.prepare      = @(varargin) prepare(varargin{:})   ;
+    guardStep_     = []                                 ;
+    guardValue_    = []                                 ;
+    isNotPreapared = true                               ;
+    function [] = prepare(q,t,varargin)
+        if isNotPreapared
+        %   Cascade preparation
+        ts.prepare(q,t,varargin{:});
+        %
+        expansionPoint = ts.qLast();
+        %
+        guardStep_  = r.get('guard.step');
+        guardValue_ = r.get('guard.value');
+        %
+        isNotPreapared = false;
         end
     end
+
+
+
+
+    %   Default guards do nothing
+    r.guard.step  = @(q,dq) guardStep(q,dq) ;
+    r.guard.value = @(q)    guardValue(q)   ;
+    r.set('guard.value',@(q)     q)  ;
+    r.set('guard.step' ,@(q,dq) dq)  ;
+    %
+    %   Wraps r in the closure which is passed to the, possibly user-defined, guards
+    function dq = guardStep(q,dq)
+        dq = guardStep_(q,dq);
+    end
+    function q = guardValue(q)
+        q     = guardValue_(q);
+    end
+
 
 
 
