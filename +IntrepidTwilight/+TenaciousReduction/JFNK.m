@@ -5,13 +5,13 @@ function jfnk = JFNK(config)
     jfnk = jfnk.changeID(jfnk,'JFNK');
     
     %   Parameters
-    jfnk.set('tolerance.residual'      ,  1.0E-6  )   ;
+    jfnk.set('tolerance.residual'      ,  1.0E-8  )   ;
     jfnk.set('tolerance.stepSize'      ,  1.0E-6  )   ;
     jfnk.set('maximumIterations'       ,  100     )   ;
     jfnk.set('epsilon'                 ,  1.0E-7  )   ;
     jfnk.set('gmres.iteration.restarts',     1    )   ;
     jfnk.set('gmres.iteration.maximum' ,    -1    )   ;
-    jfnk.set('gmres.tolerance'         ,  1.0E-10 )   ;
+    jfnk.set('gmres.tolerance'         ,  1.0E-12 )   ;
     jfnk.set('gmres.nu'                ,    0.90  )   ;
     jfnk.set('newton.relax.over'       ,    1.1   )   ;
 
@@ -317,7 +317,7 @@ function jfnk = JFNK(config)
         %   Create shortcuts for closure variables
         nu              = params.gmres.nu       ;
         linearTolerance = params.gmres.tolerance;
-        epsilon         = params.epsilon        ;
+%         epsilon         = params.epsilon        ;
         n               = numel(xk)             ;
         
         
@@ -326,8 +326,9 @@ function jfnk = JFNK(config)
         
         % First Step (k = 1)
         % Compute J*z1 and store in R
-        w      = preconditioner.apply(Z(:,1));
-        R(:,1) = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
+        w       = preconditioner.apply(Z(:,1));
+        epsilon = sqrt((1+norm(xk))*eps())/norm(w);
+        R(:,1)  = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
         
         % Compute Householder vector to bring R(:,1) into upper triangular form
         e      = [1 ; Zeros(1:n-1)]                 ;
@@ -361,8 +362,9 @@ function jfnk = JFNK(config)
             end
             
             % Compute and store A*zk in R
-            w      = preconditioner.apply(Z(:,k))                       ;
-            R(:,k) = (residual.value(xk + epsilon*w) - rk0) / epsilon   ;
+            w       = preconditioner.apply(Z(:,k))                      ;
+            epsilon = sqrt((1+norm(xk))*eps())/norm(w)                  ;
+            R(:,k)  = (residual.value(xk + epsilon*w) - rk0) / epsilon  ;
             
             % Apply all previous projections to new the column
             for m = 1:k-1

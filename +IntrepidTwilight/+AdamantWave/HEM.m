@@ -174,9 +174,9 @@ function evolver = buildFullEvolver(hem)
             %
             %   Perform a simple Euler step to knock solution off of current state
             if (dt < 1E-6)
-                q = q + dt*sd.rhs(q,t);
+%                 q = q + dt*sd.rhs(q,t);
             else
-                q = q + 1E-4*sd.rhs(q,t);
+%                 q = q + 1E-4*sd.rhs(q,t);
             end
             
 

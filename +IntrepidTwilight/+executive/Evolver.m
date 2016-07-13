@@ -105,7 +105,7 @@ function evolver = Evolver(config)
                 [q,Dq,stats] = state.update(qold,t,dt)                          ;
                 [q,Dq,t,dt]  = adjudicateSolution(q,Dq,qold,Dqold,t,dt,stats)   ;
                 
-                if (t > 2.3e-03)
+                if (t > 1.0199172e-05)
                     g = [];
                 end
 
@@ -126,8 +126,8 @@ function evolver = Evolver(config)
                 
                 %   Adjust time step
                 fallbacks = [1,fallbacks(1:24)]  ;
-                dtFall    = dt;
                 dt        = max([dt*2^(-sum(fallbacks(1:5))),stepMin]) ;
+                dtFall    = dt;
                 
                 %   Return old values
                 q          = qold;

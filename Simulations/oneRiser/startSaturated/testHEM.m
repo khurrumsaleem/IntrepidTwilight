@@ -31,7 +31,7 @@ function hem = testHEM()
     iL   = InternalEnergyOne(rhoL,T0);
     iG   = InternalEnergyOne(rhoG,T0);
     i0   = MixtureProperty(x0,iL,iG) ;
-    v0   = 0.1                       ; % [m/s]
+    v0   = 0.0001                    ; % [m/s]
     
     %   Get densities and energies assuming incompressible, hydrostatic pressures
     P     = P0*ones(14,1)   ;
@@ -94,10 +94,10 @@ function hem = testHEM()
     hem.set('model','momentumCell.momentum'       , momentum  );
     
     %   Non-dimensionalizers
-    hem.set('model','dimensionalizer.mass'     , max(mass)      );
-    hem.set('model','dimensionalizer.energy'   , max(energy)    );
-    hem.set('model','dimensionalizer.volume'   , max(volume)    );
-    hem.set('model','dimensionalizer.momentum' , max(momentum)  );
+    hem.set('model','dimensionalizer.mass'     , mass(:)          );
+    hem.set('model','dimensionalizer.energy'   , energy(:)        );
+    hem.set('model','dimensionalizer.volume'   , volume(:)        );
+    hem.set('model','dimensionalizer.momentum' , abs(momentum(:)) );
     
     %   Set guard
     hem.set('residual','guard.step', @(q,dq) guardStep(q,dq));
@@ -106,7 +106,7 @@ function hem = testHEM()
     hem.set('preconditioner','kind','block-jacobi');
     
     %   Solver
-    hem.set('solver','tolerance.residual', 1E-6);
+    hem.set('solver','tolerance.residual', 1E-5);
     hem.set('solver','maximumIterations' , 10);
    
     

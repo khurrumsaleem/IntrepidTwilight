@@ -1,4 +1,4 @@
-function J = numericalBlockDiagonalJacobian(fun,x,xBlockSize,epsilon)
+function J = numericalJacobianBlockDiagonal(fun,x,xBlockSize,epsilon)
     
     narginchk(3,4);
     
