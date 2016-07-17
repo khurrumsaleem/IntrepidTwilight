@@ -71,19 +71,24 @@ function pc = Preconditioner(config)
         
         switch(lower(pc.get('kind')))
             case('full-stagnant')
-                apply_      = @(q) applyFullJacobian(q)        ;
-                initialize_ = @(q) initializeFullJacobian(q)   ;
-                update_     = @(q) []                          ;
+                apply_      = @(q) applyFullJacobian(q)     ;
+                initialize_ = @(q) initializeFullJacobian(q);
+                update_     = @(q) []                       ;
                 
             case('block-jacobi')
-                apply_      = @(q) applyBlockJacobi(q)     ;
-                initialize_ = @(q) updateBlockJacobi(q)    ;
-                update_     = @(q) updateBlockJacobi(q)    ;
+                apply_      = @(q) applyBlockJacobi(q)  ;
+                initialize_ = @(q) updateBlockJacobi(q) ;
+                update_     = @(q) updateBlockJacobi(q) ;
+                
+            case('block-jacobi-stagnant')
+                apply_      = @(q) applyBlockJacobi(q)  ;
+                initialize_ = @(q) updateBlockJacobi(q) ;
+                update_     = @(q) []                   ;
                 
             case('none')
-                apply_      = @(q) q   ;
-                initialize_ = @(q) []  ;
-                update_     = @(q) []  ;
+                apply_      = @(q) q    ;
+                initialize_ = @(q) []   ;
+                update_     = @(q) []   ;
         end
         
     end

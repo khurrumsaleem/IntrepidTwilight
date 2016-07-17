@@ -14,7 +14,7 @@ tElapsed(1,n) = 0;
 for k = 1:n
     
     %   Set evolver
-    hem.set('evolver','time.span'         , [0,10]  );
+    hem.set('evolver','time.span'         , [0,9.75E-3]  );
     hem.set('evolver','time.step.maximum' ,    dt(k) );
     hem.set('evolver','time.step.minimum' ,   1E-12  );
     hem.set('evolver','time.step.goal'    ,   1      );
@@ -50,7 +50,7 @@ end
 
 %% 
 
-figure(1);
+figure(2);
 
 ords          = {P{1}(2,:),P{1}(4,:),P{1}(6,:),P{1}(8,:),P{1}(10,:),P{1}(12,:),P{1}(14,:)}   ;
 n             = numel(ords)             ;
@@ -61,31 +61,31 @@ h = plot(args{:},'LineWidth',2);
 legend(strcat({'\Delta{t} = '},num2str(dt(:),'%7.2E'),{' [s]'},{';  t_{clock} = '},num2str(tElapsed.','%7.2f'),{' [s]'}));
 
 
-%%
-figure(2);
-Tmax = 1.0001*max(T{1}(:));
-Tmin = 0.9999*min(T{1}(:));
-Tplt = linspace(Tmin,Tmax,500);
-[Psat,rhoL,rhoG] = SaturationStateGivenTemperature(Tplt);
-iL = InternalEnergyOne(rhoL,Tplt);
-iG = InternalEnergyOne(rhoG,Tplt);
-for k = 1:numel(P{1}(2,:))
+% %%
+% figure(2);
+% Tmax = 1.0001*max(T{1}(:));
+% Tmin = 0.9999*min(T{1}(:));
+% Tplt = linspace(Tmin,Tmax,500);
+% [Psat,rhoL,rhoG] = SaturationStateGivenTemperature(Tplt);
+% iL = InternalEnergyOne(rhoL,Tplt);
+% iG = InternalEnergyOne(rhoG,Tplt);
+% for k = 1:numel(P{1}(2,:))
+% %     plot(rhoL,iL,'k',mass{1}(:,k)./volume{1}(:,k),energy{1}(:,k)./mass{1}(:,k),'bo-');
+%     plot(Tplt,Psat,'k',T{1}(:,k),P{1}(:,k),'bo-');
+% %     axis([964.035,964.085,3.8464E5,3.848E5]);
+%     title(['Time: ',num2str(t{1}(k),'%9.7e'),' [s]'])
+%     drawnow();
+%     pause(0.1);
+% end
+% 
+% %%
+% figure(3);
+% for k = 1:numel(P{1}(2,:))
 %     plot(rhoL,iL,'k',mass{1}(:,k)./volume{1}(:,k),energy{1}(:,k)./mass{1}(:,k),'bo-');
-    plot(Tplt,Psat,'k',T{1}(:,k),P{1}(:,k),'bo-');
-%     axis([964.035,964.085,3.8464E5,3.848E5]);
-    title(['Time: ',num2str(t{1}(k),'%9.7e'),' [s]'])
-    drawnow();
-    pause(0.1);
-end
-
-%%
-figure(3);
-for k = 1:numel(P{1}(2,:))
-    plot(rhoL,iL,'k',mass{1}(:,k)./volume{1}(:,k),energy{1}(:,k)./mass{1}(:,k),'bo-');
-    title(['Time: ',num2str(t{1}(k),'%9.7e'),' [s]'])
-    xlim([5.93,5.96])
-    ylim([6.27745E5,6.27765E5]);
-    drawnow();
-    pause(0.1);
-end
+%     title(['Time: ',num2str(t{1}(k),'%9.7e'),' [s]'])
+%     xlim([5.93,5.96])
+%     ylim([6.27745E5,6.27765E5]);
+%     drawnow();
+%     pause(0.1);
+% end
 

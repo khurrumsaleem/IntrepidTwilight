@@ -158,7 +158,6 @@ function q2Dup = Quasi2DUpwind(config)
     
     
     %   Momentum RHS Parameters
-    friction = [] ;
     LoD      = [] ;
     flowArea = [] ;
     Ainter   = [] ;
@@ -257,7 +256,7 @@ function q2Dup = Quasi2DUpwind(config)
         
         % Momentum
         flowArea = model.momentumCell.flowArea          ;
-        friction = model.momentumCell.source.friction   ;
+%         friction = model.momentumCell.source.friction   ;
         LoD      = model.momentumCell.LoD               ;
         
         
@@ -581,7 +580,7 @@ function q2Dup = Quasi2DUpwind(config)
         sense = sign(momd);
         sense(sense == 0) = 1;
         
-        fFriction = frictionFactor(rhov,volMC./flowArea,1E-3);
+        fFriction = frictionFactor(abs(rhov),volMC./flowArea,1E-3);
         
         % Pieces
         advect = 0*Cmc*(fmom.*Ainter) - (Cinter*(TD.P(iI).*Ainter))     ;
@@ -625,11 +624,15 @@ function q2Dup = Quasi2DUpwind(config)
     
     function [] = updateThermodynamicState()
         % Thermodynamic properites
-        TD.rho       = mass   ./ volume                     ;
-        TD.e         = energy ./ mass                       ;
-        [TD.T,state] = Temperature(TD.rho,TD.e,TD.T)        ;
-        TD.P         = Pressure(TD.rho,TD.T,false,state.ND_);
-        TD.rhoh      = energy ./ volume + TD.P              ;
+        TD.rho       = mass   ./ volume                 ;
+        TD.e         = energy ./ mass                   ;
+        [TD.T,state] = Temperature(TD.rho,TD.e,TD.T)    ;
+        TD.rhoL      = state.rhoL                       ;
+        TD.rhoG      = state.rhoG                       ;
+        TD.x         = state.x                          ;
+        TD.isTwoPhi  = state.isTwoPhi                   ;
+        TD.P         = Pressure(TD.rho,TD.T,false,state);
+        TD.rhoh      = energy ./ volume + TD.P          ;
     end
     
     
@@ -655,13 +658,13 @@ function q2Dup = Quasi2DUpwind(config)
         f = rhov;
         
         %   Phase mask
-        isTwoPhi = state.isTwoPhi   ;
-        isOnePhi = not(isTwoPhi)    ;
+        isTwoPhi = TD.isTwoPhi  ;
+        isOnePhi = not(isTwoPhi);
         
         %   Get kinematic numbers
-        mu  = Viscosity(state.rho,state.T)  ;
-        Re  = abs(rhov) .* Lchar ./ mu      ;
-        eoD = roughness ./ Lchar            ;
+        mu  = Viscosity(TD.rho,TD.T);
+        Re  = rhov .* Lchar ./ mu   ;
+        eoD = roughness ./ Lchar    ;
         
         %   One-phase friction factor
         if any(isOnePhi)
@@ -676,13 +679,13 @@ function q2Dup = Quasi2DUpwind(config)
             %   Thome.
             
             %   Mask properties
-            rhov = rhov(isTwoPhi)       ;
-            rho  = state.rho(isTwoPhi)  ;
-            rhoL = state.rhoL(isTwoPhi) ;
-            rhoG = state.rhoG(isTwoPhi) ;
-            T    = state.T(isTwoPhi)    ;
-            x    = state.x(isTwoPhi)    ;
-            eoD  = eoD(isTwoPhi)        ;
+            rhov = rhov(isTwoPhi)   ;
+            rho  = TD.rho(isTwoPhi) ;
+            rhoL = TD.rhoL(isTwoPhi);
+            rhoG = TD.rhoG(isTwoPhi);
+            T    = TD.T(isTwoPhi)   ;
+            x    = TD.x(isTwoPhi)   ;
+            eoD  = eoD(isTwoPhi)    ;
             
             %   Liquid/Gas Reynolds numbers and friction factors
             muL  = Viscosity(rhoL,T)                ;
@@ -814,20 +817,26 @@ function q2Dup = Quasi2DUpwind(config)
         %   Update and store perturbed values
         TD.T = repmat(TD.T,5,1);
         updateThermodynamicState();
-        rhoBlock   = TD.rho ;
-        eBlock     = TD.e   ;
-        Tblock     = TD.T   ;
-        Pblock     = TD.P   ;
-        rhohBlock  = TD.rhoh;
-        stateBlock = state  ;
+        rhoBlock      = TD.rho      ;
+        rhoLBlock     = TD.rhoL     ;
+        rhoGBlock     = TD.rhoG     ;
+        eBlock        = TD.e        ;
+        Tblock        = TD.T        ;
+        Pblock        = TD.P        ;
+        rhohBlock     = TD.rhoh     ;
+        xBlock        = TD.x        ;
+        isTwoPhiBlock = TD.isTwoPhi ;
         
         %   Create unmutated TD struct
-        TDref.rho  = rhoBlock(1:nCV)            ;
-        TDref.e    = eBlock(1:nCV)              ;
-        TDref.T    = Tblock(1:nCV)              ;
-        TDref.P    = Pblock(1:nCV)              ;
-        TDref.rhoh = rhohBlock(1:nCV)           ;
-        stateRef   = structFilter(state,1:nCV)  ;
+        TDref.rho      = rhoBlock(1:nCV)        ;
+        TDref.rhoL     = rhoLBlock(1:nCV)       ;
+        TDref.rhoG     = rhoGBlock(1:nCV)       ;
+        TDref.e        = eBlock(1:nCV)          ;
+        TDref.T        = Tblock(1:nCV)          ;
+        TDref.P        = Pblock(1:nCV)          ;
+        TDref.rhoh     = rhohBlock(1:nCV)       ;
+        TDref.x        = xBlock(1:nCV)          ;
+        TDref.isTwoPhi = isTwoPhiBlock(1:nCV)   ;
         
         %   Store compressed perturbed vectors and reset closure variables
         massTD     = [ massRef     ; massTD     ]   ;
@@ -839,7 +848,6 @@ function q2Dup = Quasi2DUpwind(config)
         volume     = volumeRef                      ;
         momentum   = momentumRef                    ;
         TD         = TDref                          ;
-        state      = stateRef                       ;
         
         
         
@@ -858,13 +866,17 @@ function q2Dup = Quasi2DUpwind(config)
         for k = K
             
             %   Perturb
-            nCVk       = nCV+k;
-            mass(k)    = massTD(nCVk)   ;
-            TD.rho(k)  = rhoBlock(nCVk) ;
-            TD.e(k)    = eBlock(nCVk)   ;
-            TD.T(k)    = Tblock(nCVk)   ;
-            TD.P(k)    = Pblock(nCVk)   ;
-            TD.rhoh(k) = rhohBlock(nCVk);
+            nCVk           = nCV+k;
+            mass(k)        = massTD(nCVk)       ;
+            TD.rho(k)      = rhoBlock(nCVk)     ;
+            TD.rhoL(k)     = rhoLBlock(nCVk)    ;
+            TD.rhoG(k)     = rhoGBlock(nCVk)    ;
+            TD.e(k)        = eBlock(nCVk)       ;
+            TD.T(k)        = Tblock(nCVk)       ;
+            TD.P(k)        = Pblock(nCVk)       ;
+            TD.rhoh(k)     = rhohBlock(nCVk)    ;
+            TD.x(k)        = xBlock(nCVk)       ;
+            TD.isTwoPhi(k) = isTwoPhiBlock(nCVk);
             updateVelocity();
             massPlus  = rhsMass();
             
@@ -894,13 +906,17 @@ function q2Dup = Quasi2DUpwind(config)
         for k = K
             
             %   Perturb
-            nCVk       = 2*nCV + k      ;
-            energy(k)  = energyTD(nCV+k);
-            TD.rho(k)  = rhoBlock(nCVk) ;
-            TD.e(k)    = eBlock(nCVk)   ;
-            TD.T(k)    = Tblock(nCVk)   ;
-            TD.P(k)    = Pblock(nCVk)   ;
-            TD.rhoh(k) = rhohBlock(nCVk);
+            nCVk           = 2*nCV + k          ;
+            energy(k)      = energyTD(nCV + k)  ;
+            TD.rho(k)      = rhoBlock(nCVk)     ;
+            TD.rhoL(k)     = rhoLBlock(nCVk)    ;
+            TD.rhoG(k)     = rhoGBlock(nCVk)    ;
+            TD.e(k)        = eBlock(nCVk)       ;
+            TD.T(k)        = Tblock(nCVk)       ;
+            TD.P(k)        = Pblock(nCVk)       ;
+            TD.rhoh(k)     = rhohBlock(nCVk)    ;
+            TD.x(k)        = xBlock(nCVk)       ;
+            TD.isTwoPhi(k) = isTwoPhiBlock(nCVk);
             updateVelocity();
             energyPlus = rhsEnergy();
             
@@ -930,13 +946,17 @@ function q2Dup = Quasi2DUpwind(config)
         for k = K(isElastic)
             
             %   Perturb
-            nCVk       = 3*nCV + k      ;
-            volume(k)  = volumeTD(nCV+k);
-            TD.rho(k)  = rhoBlock(nCVk) ;
-            TD.e(k)    = eBlock(nCVk)   ;
-            TD.T(k)    = Tblock(nCVk)   ;
-            TD.P(k)    = Pblock(nCVk)   ;
-            TD.rhoh(k) = rhohBlock(nCVk);
+            nCVk           = 3*nCV + k          ;
+            volume(k)      = volumeTD(nCV+k)    ;
+            TD.rho(k)      = rhoBlock(nCVk)     ;
+            TD.rhoL(k)     = rhoLBlock(nCVk)    ;
+            TD.rhoG(k)     = rhoGBlock(nCVk)    ;
+            TD.e(k)        = eBlock(nCVk)       ;
+            TD.T(k)        = Tblock(nCVk)       ;
+            TD.P(k)        = Pblock(nCVk)       ;
+            TD.rhoh(k)     = rhohBlock(nCVk)    ;
+            TD.x(k)        = xBlock(nCVk)       ;
+            TD.isTwoPhi(k) = isTwoPhiBlock(nCVk);
             updateVelocity();
             volumePlus = rhsVolume();
             
@@ -970,11 +990,15 @@ function q2Dup = Quasi2DUpwind(config)
             %   Perturb
             %             nMCk        = 3*nCV+k;
             momentum(k) = momentumTD(nMC+k) ;
-            %             TD.rho(k)   = rhoBlock(nMCk)    ;
-            %             TD.e(k)     = eBlock(nMCk)      ;
-            %             TD.T(k)     = Tblock(nMCk)      ;
-            %             TD.P(k)     = Pblock(nMCk)      ;
-            %             TD.rhoh(k)  = rhohBlock(nMCk)   ;
+%             TD.rho(k)      = rhoBlock(nCVk)     ;
+%             TD.rhoL(k)     = rhoLBlock(nCVk)    ;
+%             TD.rhoG(k)     = rhoGBlock(nCVk)    ;
+%             TD.e(k)        = eBlock(nCVk)       ;
+%             TD.T(k)        = Tblock(nCVk)       ;
+%             TD.P(k)        = Pblock(nCVk)       ;
+%             TD.rhoh(k)     = rhohBlock(nCVk)    ;
+%             TD.x(k)        = xBlock(nCVk)       ;
+%             TD.isTwoPhi(k) = isTwoPhiBlock(nCVk);
             updateVelocity();
             momentumPlus = rhsMomentum();
             
