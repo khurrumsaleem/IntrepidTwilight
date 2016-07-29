@@ -584,7 +584,7 @@ function q2Dup = Quasi2DUpwind(config)
         
         % Pieces
         advect = 0*Cmc*(fmom.*Ainter) - (Cinter*(TD.P(iI).*Ainter))     ;
-        buoy   = gizi .* massMC .* sense                                ;
+        buoy   = gizi .* massMC                                ;
         fric   = -fFriction .* LoD .* abs(rhov) .* vCV .* flowArea / 2  ;
         
         % Total RHS

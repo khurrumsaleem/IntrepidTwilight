@@ -4,7 +4,7 @@ clear();
 hem = testHEM();
 
 %   Adjust evolver time stuff
-dt = 0.1;
+dt = 50;
 n  = numel(dt);
 q{1,n} = [];
 Dq{1,n} = [];
@@ -14,11 +14,11 @@ tElapsed(1,n) = 0;
 for k = 1:n
     
     %   Set evolver
-    hem.set('evolver','time.span'         , [0,9.75E-3]  );
+    hem.set('evolver','time.span'         , [0,4000] );
     hem.set('evolver','time.step.maximum' ,    dt(k) );
     hem.set('evolver','time.step.minimum' ,   1E-12  );
     hem.set('evolver','time.step.goal'    ,   1      );
-    hem.set('evolver','saveRate'          ,   dt(k)  );
+    hem.set('evolver','saveRate'          ,   0.5    );
     
     %   Run
     tic;
@@ -27,6 +27,8 @@ for k = 1:n
     [q{k},Dq{k},t{k}] = hem.results();
     
 end
+
+t = {(0:0.5:4E3).'};
 
 %%
 %   Calculate pressures
@@ -50,12 +52,12 @@ end
 
 %% 
 
-figure(2);
-
-ords          = {P{1}(2,:),P{1}(4,:),P{1}(6,:),P{1}(8,:),P{1}(10,:),P{1}(12,:),P{1}(14,:)}   ;
+figure(6);
+mask          = 1:numel(t{1});
+ords          = {P{1}(2,mask),P{1}(4,mask),P{1}(6,mask),P{1}(8,mask),P{1}(10,mask),P{1}(12,mask),P{1}(14,mask)}   ;
 n             = numel(ords)             ;
 args{1,2*n}   = []                      ;
-args(1:2:end) = t.'                     ;
+args(1:2:end) = {t{1}(mask)}            ;
 args(2:2:end) = ords                    ;
 h = plot(args{:},'LineWidth',2);
 legend(strcat({'\Delta{t} = '},num2str(dt(:),'%7.2E'),{' [s]'},{';  t_{clock} = '},num2str(tElapsed.','%7.2f'),{' [s]'}));
@@ -78,14 +80,15 @@ legend(strcat({'\Delta{t} = '},num2str(dt(:),'%7.2E'),{' [s]'},{';  t_{clock} = 
 %     pause(0.1);
 % end
 % 
-% %%
+%%
 % figure(3);
+% 
 % for k = 1:numel(P{1}(2,:))
-%     plot(rhoL,iL,'k',mass{1}(:,k)./volume{1}(:,k),energy{1}(:,k)./mass{1}(:,k),'bo-');
+%     plot(mass{1}(:,k)./volume{1}(:,k),energy{1}(:,k)./mass{1}(:,k),'bo-');
 %     title(['Time: ',num2str(t{1}(k),'%9.7e'),' [s]'])
-%     xlim([5.93,5.96])
-%     ylim([6.27745E5,6.27765E5]);
+%     xlim([40,75])
+%     ylim([4.35E5,4.49E5]);
 %     drawnow();
-%     pause(0.1);
+%     pause(0.01);
 % end
 

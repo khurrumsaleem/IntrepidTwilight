@@ -76,9 +76,9 @@ function hem = testHEM()
     
     %   Sources
     hem.set('model','controlVolume.source.mass'   , @(varargin) 0);
-    tramp  = 50;
+    tramp  = 3600+10;
     shape  = @(t) (t<=tramp)*(t>=10)*(t-10)/(tramp-10) + (t>tramp);
-    source = @(t) 5E3 * shape(t);
+    source = @(t) 10E3 * shape(t);
     hem.set('model','controlVolume.source.energy' , @(~,~,~,~,t) ...
         [0; -source(t) ; zeros(6,1) ; source(t) ; zeros(5,1)]);
     hem.set('model','momentumCell.source.momentum', @(varargin)0);

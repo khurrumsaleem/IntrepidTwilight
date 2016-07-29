@@ -88,14 +88,15 @@ function evolver = Evolver(config)
         %   Take a single step at stepMin to initialize things and
         %   let the dt coast up through the error estimates returned
         %   by State
-        t      = timeSpan(1)        ;
-        dt     = stepMin            ;
-        [~,Dq] = state.update(q,t,0);
+        t         = timeSpan(1)         ;
+        dt        = stepMin             ;
+        [~,Dq]    = state.update(q,t,0) ;
+        iT        = 2:nSave             ;
+        saveTimes = saveTimes(2:end)    ;
         
-        
-        for k = 2:nSave
+        while not(isempty(saveTimes))
 
-            while t <= saveTimes(k)
+            while t <= saveTimes(1)
 
                 %   Update from last iteration (wasted assignment for first iteration only)
                 qold  = q   ;
@@ -104,16 +105,17 @@ function evolver = Evolver(config)
                 %   Solve and adjudicate a potential fallback
                 [q,Dq,stats] = state.update(qold,t,dt)                          ;
                 [q,Dq,t,dt]  = adjudicateSolution(q,Dq,qold,Dqold,t,dt,stats)   ;
-                
-                if (t > 1.0199172e-05)
-                    g = [];
-                end
 
             end
 
-            qs(:,k) = IntrepidTwilight.ConvenientMeans.hermiteInterpolation(...
-                [t-dt;t],[qold,q],[Dqold,Dq],saveTimes(k));
-            [~,Dqs(:,k),~] = state.update(qs(:,k),saveTimes(k),0);
+            %   Determine intermediate values from a Hermite interpolation
+            saveMask = (saveTimes <= t);
+            qs(:,iT(saveMask)) = ...
+                IntrepidTwilight.ConvenientMeans.hermiteInterpolation(...
+                        [t-dt;t],[qold,q],[Dqold,Dq],saveTimes(saveMask));
+%             [~,Dqs(:,k),~] = state.update(qs(:,saveMask),saveTimes(saveMask),0);
+            iT        = iT(~saveMask)       ;
+            saveTimes = saveTimes(~saveMask);
 
         end
 
