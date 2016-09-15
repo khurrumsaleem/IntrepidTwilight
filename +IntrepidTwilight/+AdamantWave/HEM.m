@@ -133,9 +133,10 @@ function evolver = buildFullEvolver(hem)
     
     %   Array used to store  previously calculated quantities
     %   for use in linearity estimation
-    tstore  = [];
-    qstore  = [];
-    Dqstore = [];
+    tstore    = [];
+    qstore    = [];
+    Dqstore   = [];
+    isDynamic = [];
     
     
     %   Prepare
@@ -153,6 +154,7 @@ function evolver = buildFullEvolver(hem)
             tstore        = t                       ;
             qstore        = sd.makeDimensionless(q) ;
             Dqstore       = sd.rhs(qstore,t)        ;
+            isDynamic     = sd.get('isDynamic')     ;
             isNotPrepared = false                   ;
             
         end
@@ -173,12 +175,18 @@ function evolver = buildFullEvolver(hem)
             r.update(q,t,dt);
             %
             %   Perform a simple Euler step to knock solution off of current state
-            if (dt < 1E-6)
-%                 q = q + dt*sd.rhs(q,t);
+            q  = IntrepidTwilight.ConvenientMeans.linearlyImplicitEuler(...
+                @(q,t) sd.rhs(q,t),q,linspace(0,dt,2));
+            dq = (q(:,1)-q(:,end)).*isDynamic;
+            if not(any(isnan(dq))) && not(any(abs(imag(dq)) > eps()))
+                dq = r.guard.step(q(:,1),dq);
+                while any(abs(dq)>1E-12) && any(isnan(r.value(q(:,1) - dq)))
+                    dq = 0.5 * dq;
+                end
+                q = q(:,1) - dq;
             else
-%                 q = q + 1E-4*sd.rhs(q,t);
+                q = q(:,1);
             end
-            
 
             %   Solve
             [q,stats] = solver.solve(q);

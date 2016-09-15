@@ -7,6 +7,8 @@ function jfnk = JFNK(config)
     %   Parameters
     jfnk.set('tolerance.residual'      ,  1.0E-8  )   ;
     jfnk.set('tolerance.stepSize'      ,  1.0E-6  )   ;
+    jfnk.set('isNormNotDone'           ,  []      )   ;
+    jfnk.set('isStepNotDone'           ,  []      )   ;
     jfnk.set('maximumIterations'       ,  100     )   ;
     jfnk.set('epsilon'                 ,  1.0E-7  )   ;
     jfnk.set('gmres.iteration.restarts',     1    )   ;
@@ -17,10 +19,12 @@ function jfnk = JFNK(config)
 
 
     %   Hook initializations
-    jfnk.set('hook.presolve' , @(x) [] );
     jfnk.set('hook.postsolve', @(x) [] );
     jfnk.set('hook.prestep'  , @(x) [] );
-    jfnk.set('hook.poststep' , @(x) [] );
+    jfnk.set('hook.presolve' , @(x) ... %         e   x   i   t
+        char(any(isnan(x)|(abs(imag(x))>eps()))*[101,120,105,116]));
+    jfnk.set('hook.poststep' , @(x) ... %         e   x   i   t
+        char(any(isnan(x)|(abs(imag(x))>eps()))*[101,120,105,116]));
 
 
 
@@ -55,8 +59,10 @@ function jfnk = JFNK(config)
 
     %   Extract parameters from store
     jfnk.prepare  = @(varargin) prepare(varargin{:});
-    params        = struct()     ;
-    isNotPrepared = true;
+    params        = struct()                        ;
+    isNotPrepared = true                            ;
+    isNormNotDone = []                              ;
+    isStepNotDone = []                              ;
     function [] = prepare(varargin)
         if isNotPrepared
             
@@ -68,6 +74,18 @@ function jfnk = JFNK(config)
             params = jfnk.get();
             
             isNotPrepared = false;
+            
+            %   Get convergence checker
+            isNormNotDone = params.isNormNotDone;
+            if isempty(isNormNotDone)
+                isNormNotDone = @(x,r) norm(r) > params.tolerance.nonlinear;
+            end
+            
+            %   Get step-size checker
+            isStepNotDone = params.isStepNotDone;
+            if isempty(isStepNotDone)
+                isStepNotDone = @(dx) true;
+            end
 
         end
     end
@@ -131,10 +149,6 @@ function jfnk = JFNK(config)
         end
 
 
-        %   Hook
-        preSolveFlag = params.hook.presolve(xNL);
-
-
         %   Allocate stats struct
         stats.iterations                       = 0;
         stats.norm(params.maximumIterations,1) = 0;
@@ -146,6 +160,9 @@ function jfnk = JFNK(config)
         rNLnorm       = norm(rNL,2)                 ;
         stats.norm(1) = rNLnorm                     ;
 
+        
+        %   Hook
+        preSolveFlag = params.hook.presolve([xNL;rNL]);
 
         %   Initialize preconditionar
         preconditioner.initialize(xNL);
@@ -163,6 +180,8 @@ function jfnk = JFNK(config)
         flaggedExit  = strcmpi('exit',preSolveFlag)                     ;
         notDone      = notConverged && belowIterMax && not(flaggedExit) ;
 
+        
+        
 
         %   Iterate
         while notDone
@@ -175,17 +194,12 @@ function jfnk = JFNK(config)
             end
 
 
-            %   Evaluate initial residual
-            rNL     = residual.value(xNL)   ;
-            rNLnorm = norm(rNL,2)           ;
-
-
             %   Take a step
-            [xNL,rNLnorm,~] = nonlinearStep(xNL,rNL,rNLnorm);
+            [xNL,rNL,dx,rNLnorm] = nonlinearStep(xNL,rNL,rNLnorm);
 
 
             % Hook
-            postFlag = params.hook.poststep(xNL);
+            postFlag = params.hook.poststep([xNL;rNL]);
             if strcmpi('exit',postFlag)
                 flaggedExit = true();
                 break;
@@ -199,10 +213,10 @@ function jfnk = JFNK(config)
 
 
             %   Iteration convergence stuff
-            normNotDone  =     rNLnorm      >= params.tolerance.residual            ;
-%             stepNotDone  =      dxNorm      >= params.tolerance.stepSize* norm(xNL) ;
-            belowIterMax = stats.iterations <= params.maximumIterations             ;
-            notConverged = normNotDone && stepNotDone                               ;
+            normNotDone  = isNormNotDone(xNL,rNL)                       ;
+            stepNotDone  = isStepNotDone(dx)                            ;
+            belowIterMax = stats.iterations <= params.maximumIterations ;
+            notConverged = normNotDone && stepNotDone                   ;
 
 
             %   Continue the iteration
@@ -243,12 +257,11 @@ function jfnk = JFNK(config)
     % ================================================================= %
     %                         Non-Linear Step                           %
     % ================================================================= %
-    function [xNL,rNLnorm,dxNorm] = nonlinearStep(xNLm1,rNLm1,rNLnorm)
+    function [xNL,rNL,rNLnorm,dxNorm] = nonlinearStep(xNLm1,rNLm1,rNLnorm)
         
         %   Advance in a descent direction
-        [xNL,~,rNLnorm,dxNorm] = quasiNewtonUpdate(xNLm1,rNLm1,rNLnorm);
-        
-        
+        [xNL,rNL,rNLnorm,dxNorm] = quasiNewtonUpdate(xNLm1,rNLm1,rNLnorm);
+
 %         %   Extrapolate solution
 %         dxExtrap    = rNL .* (xNL - xNLm1)./(rNL - rNLm1 + eps(rNLm1));
 %         xExtrap     = xNL - dxExtrap            ;
@@ -268,23 +281,36 @@ function jfnk = JFNK(config)
     % ================================================================= %
     %                         Quasi-Newton Update                       %
     % ================================================================= %
-    function [xNew,rNew,rNewNorm,dxNorm] = quasiNewtonUpdate(xOld,rOld,rOldNorm)
+    function [xNew,rNew,dx,rNewNorm] = quasiNewtonUpdate(xOld,rOld,rOldNorm)
         
         % Solve linear system to within linearTolerance
         dx = GMRES(xOld,rOld,rOldNorm);
 
-        %   Allow adjustment of the step size through user-defined function
-        dx       = residual.guard.step(xOld,dx) ;
-        rNew     = residual.value(xOld - dx)    ;
-        rNewNorm = norm(rNew,2)                 ;
+        if all(not(isnan(dx)))
+            
+            %   Allow adjustment of the step size through user-defined function
+            dx       = residual.guard.step(xOld,dx) ;
+            rNew     = residual.value(xOld - dx)    ;
+            rNewNorm = norm(rNew,2)                 ;
+            
+            %   Backtrack
+            if (rNewNorm > rOldNorm)
+                [dx,rNewNorm,rNew] = inexactLineSearch(xOld,dx,rOldNorm,rNewNorm);
+            end
+            
+            % Calculate relaxed x value
+            xNew   = xOld - dx      ;
         
-         if (rNewNorm > rOldNorm)
-            [dx,rNewNorm] = inexactLineSearch(xOld,dx,rOldNorm,rNewNorm);
+        else
+            
+            %   Fallback call
+            xNew     = dx   ;
+            rNew     = dx   ;
+            rNewNorm = NaN  ;
+            
         end
         
-        % Calculate relaxed x value
-        xNew   = xOld - dx      ;
-        dxNorm = norm(dx,Inf)   ;
+
         
     end
 
@@ -317,7 +343,6 @@ function jfnk = JFNK(config)
         %   Create shortcuts for closure variables
         nu              = params.gmres.nu       ;
         linearTolerance = params.gmres.tolerance;
-%         epsilon         = params.epsilon        ;
         n               = numel(xk)             ;
         
         
@@ -351,6 +376,12 @@ function jfnk = JFNK(config)
         rkm1Norm = rk0Norm      ;
         rkNorm   = norm(rk,2)   ;
         
+        %   NaN guard; causes a fallback
+        if any(isnan(R(:,1)))
+            dx = xk*NaN;
+            return;
+        end
+        
         
         for k = 2:params.gmres.iteration.maximum
             
@@ -365,6 +396,13 @@ function jfnk = JFNK(config)
             w       = preconditioner.apply(Z(:,k))                      ;
             epsilon = sqrt((1+norm(xk))*eps())/norm(w)                  ;
             R(:,k)  = (residual.value(xk + epsilon*w) - rk0) / epsilon  ;
+            
+            
+            %   NaN guard; causes a fallback
+            if any(isnan(R(:,k)))
+                dx = xk*NaN;
+                return;
+            end
             
             % Apply all previous projections to new the column
             for m = 1:k-1
@@ -431,58 +469,59 @@ function jfnk = JFNK(config)
     % ================================================================= %
     %                       Inexact Line Search                         %
     % ================================================================= %
-    function [dx,ralpha] = inexactLineSearch(x0,dx,r0,rbeta)
-        
-%         %   
-%         while (rbeta > 1E2)
-%             dx = 0.5 * dx;
-%             rbeta = norm(residual.value(x0 - dx));
-%         end
-
+    function [dx,ra,rav] = inexactLineSearch(x0,dx,r0,rb)
 
         %   Quadratic optimum
-        sbeta  = 1                                          ;
-        salpha = (sbeta^2*r0)/(2*(sbeta * r0 + rbeta - r0)) ;
-        ralpha = norm(residual.value(x0 - salpha*dx))       ;
-
-
-%         %   Guard against extremely small quadratic optimums
-%         if (salpha < 1E-3)
-%             salpha = sbeta/2                                ;
-%             ralpha = norm(residual.value(x0 - salpha*dx))   ;
-%         end
-
+        if isinf(rb)
+            sa = 1;
+            while (rb > 1000*r0)
+                sa = 0.5 * sa;
+                rb = norm(residual.value(x0 - sa*dx),2);
+            end
+            dx = sa*dx;
+        end
+        
+        sb  = 1                                 ;
+        sa  = (sb^2*r0)/(2*(sb * r0 + rb - r0)) ;
+        rav = residual.value(x0 - sa*dx)        ;
+        ra  = norm(rav)                         ;
 
         %   Cubic optimum
         iter = 0;
-        while (ralpha > r0) && (abs(sbeta-salpha)>100*eps())
+        while (ra > r0) && (abs(sb-sa)>100*eps())
 
             % Reassign for recursion
-            rgamma = rbeta  ;
-            sgamma = sbeta  ;
-            rbeta  = ralpha ;
-            sbeta  = salpha ;
+            rc = rb ;
+            sc = sb ;
+            rb = ra ;
+            sb = sa ;
             
             %   Cubic coefficients
-            detA = sbeta^2  * sgamma^2 * (sbeta-sgamma)     ;
-            b1   = sbeta^2  * ( rgamma + r0*(sgamma - 1) )  ;
-            b2   = sgamma^2 * ( rbeta  + r0*(sbeta  - 1) )  ;
-            c    = -r0                                      ;
-            b    =  2 * ( sbeta*b1 - sgamma*b2 )/detA       ;
-            a    = -3 * (       b1 -        b2 )/detA       ;
+            detA = sb^2  * sc^2 * (sb-sc)               ;
+            b1   = sb^2  * ( rc + r0*(sc - 1) )         ;
+            b2   = sc^2 * ( rb  + r0*(sb  - 1) )        ;
+            c    = -r0                                  ;
+            b    =  2 * ( sb*b1 - sc*b2 )/detA          ;
+            a    = -3 * (       b1 -        b2 )/detA   ;
 
             
             %   Cubic optimums
-            opt    = (-b-sign(b)*sqrt(b^2-4*a*c))/(2*a)     ;
-            opts   = [opt,c/(a*opt)]                        ;
-            salpha = min(opts(opts<1 & opts>0))             ;
-            ralpha = norm(residual.value(x0 - salpha*dx))   ;
+            opt  = (-b-sign(b)*sqrt(b^2-4*a*c))/(2*a)   ;
+            opts = [opt,c/(a*opt)]                      ;
+            sa   = min(opts(opts<1 & opts>0))           ;
             
+            if isempty(sa)
+                break;
+            end
+            
+            rav  = residual.value(x0 - sa*dx)           ;
+            ra   = norm(rav,2)                          ;
+
             iter = iter + 1;
 
         end
         
-        dx = salpha*dx;
+        dx = sa*dx;
 
     end
 

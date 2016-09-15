@@ -5,14 +5,15 @@ function evolver = Evolver(config)
     evolver = evolver.changeID(evolver,'evolver','evolver');
     
     %   Set default values
-    evolver.set('time.span'          , [0,1]  );
-    evolver.set('time.step.maximum'  , 1      );
-    evolver.set('time.step.minimum'  , 0      );
-    evolver.set('time.step.goal'     , 0.1    );
-    evolver.set('initialCondition'   , 0      );
-    evolver.set('saveRate'           , 0.1    );
-    evolver.set('tolerance.relative' , 1E-3   );
-    evolver.set('tolerance.absolute' , 1E-6   );
+    evolver.set('time.span'          , [0,1]            );
+    evolver.set('time.terminator'    , @(varargin) false);
+    evolver.set('time.step.maximum'  , 1                );
+    evolver.set('time.step.minimum'  , 0                );
+    evolver.set('time.step.goal'     , 0.1              );
+    evolver.set('initialCondition'   , 0                );
+    evolver.set('saveRate'           , 0.1              );
+    evolver.set('tolerance.relative' , 1E-3             );
+    evolver.set('tolerance.absolute' , 1E-6             );
     %
     %   Overwrite defaults at construction
     if (nargin >= 1)
@@ -40,9 +41,9 @@ function evolver = Evolver(config)
     
     
     %   Initialize private variables for the times and values
-    saveTimes = []  ;
-    qs    = []  ;
-    Dqs   = []  ;
+    times = [];
+    qs    = [];
+    Dqs   = [];
     
     
     
@@ -54,8 +55,9 @@ function evolver = Evolver(config)
     evolver.evolve  = @() evolve()  ;
     function [] = evolve()
         
-        %   Pull time information
+        %   Pull runtime information
         timeSpan          = evolver.get('time.span')            ;
+        terminator        = evolver.get('time.terminator')      ;
         stepSave          = evolver.get('saveRate')             ;
         stepMin           = evolver.get('time.step.minimum')    ;
         stepMax           = evolver.get('time.step.maximum')    ;
@@ -63,69 +65,107 @@ function evolver = Evolver(config)
         absoluteTolerance = evolver.get('tolerance.absolute')   ;
         fallbacks         = zeros(1,25)                         ;
         dtFall            = zeros(1,8)                          ;
-        
+
+
         %   Create vector of save times
-        saveTimes = (timeSpan(1):stepSave:timeSpan(2)).';
-        if (saveTimes ~= timeSpan(2))
-            saveTimes = [saveTimes ; timeSpan(2)];
+        times = (timeSpan(1):stepSave:timeSpan(2)).';
+        if (times(end) ~= timeSpan(2))
+            times = [times ; timeSpan(2)];
         end
-        nSave = numel(saveTimes);
-        
+        nSave = numel(times);
+
+
         %   Initial data and allocation
-        IC = evolver.get('initialCondition');
-        qs = IC(:,ones(1,nSave));
-        q  = qs(:,1);
-        
-        
+        IC  = evolver.get('initialCondition')   ;
+        qs  = IC(:,ones(1,nSave))               ;
+        Dqs = qs                                ;
+
+
         %   Prepare the state for evoltuion
-        state.prepare(q,timeSpan(1));
+        state.prepare(qs(:,1),timeSpan(1));
         
         
         % ------------------------------------------- %
         %                  Time March                 %
         % ------------------------------------------- %
-        
         %   Take a single step at stepMin to initialize things and
         %   let the dt coast up through the error estimates returned
         %   by State
-        t         = timeSpan(1)         ;
-        dt        = stepMin             ;
-        [~,Dq]    = state.update(q,t,0) ;
-        iT        = 2:nSave             ;
-        saveTimes = saveTimes(2:end)    ;
+        t         = times(1)                ;
+        q         = qs(:,1)                 ;
+        dt        = stepMin                 ;
+        [~,Dq]    = state.update(q,t,0)     ;
+        iT        = (1:nSave).'             ;
+        saved     = [true;false(nSave-1,1)] ;
+        stopMarch = terminator(t,q,Dq)      ;
         
-        while not(isempty(saveTimes))
-
-            while t <= saveTimes(1)
-
+        
+        while t<=times(end) && not(stopMarch)
+            
+            while (t <= times(find(not(saved),1,'first'))) && not(stopMarch)
+                
                 %   Update from last iteration (wasted assignment for first iteration only)
                 qold  = q   ;
                 Dqold = Dq  ;
                 
-                %   Solve and adjudicate a potential fallback
+                %   Solve, adjudicate, and check for termination
                 [q,Dq,stats] = state.update(qold,t,dt)                          ;
                 [q,Dq,t,dt]  = adjudicateSolution(q,Dq,qold,Dqold,t,dt,stats)   ;
-
+                
+                if (norm(q-qold,1) > eps())
+                    stopMarch = terminator(t,q,Dq);
+                else
+                    stopMarch = false;
+                end
+                
             end
-
+            
+            
             %   Determine intermediate values from a Hermite interpolation
-            saveMask = (saveTimes <= t);
-            qs(:,iT(saveMask)) = ...
-                IntrepidTwilight.ConvenientMeans.hermiteInterpolation(...
-                        [t-dt;t],[qold,q],[Dqold,Dq],saveTimes(saveMask));
-%             [~,Dqs(:,k),~] = state.update(qs(:,saveMask),saveTimes(saveMask),0);
-            iT        = iT(~saveMask)       ;
-            saveTimes = saveTimes(~saveMask);
-
+            inPast = times <= t;
+            iSave  = iT( inPast & not(saved) ).'; % Transposed for for-loop indexing
+            if any(iSave)
+                qs(:,iT(iSave)) = ...
+                    IntrepidTwilight.ConvenientMeans.hermiteInterpolation(...
+                    [t-dt;t],[qold,q],[Dqold,Dq],times(iSave));
+                
+                %   Calculate intermediate derivatives
+                for k = iSave
+                    [~,Dqs(:,k),~] = state.update(qs(:,k),times(k),0);
+                end
+                
+                %   Contract save indices
+                saved = saved | inPast;
+            end
+            
+            
+            %   Handle early termination masking
+            if stopMarch 
+                mask  = times < t;
+                times = [times(mask) ; t];
+                qs    = [qs(:,mask)  , q];
+                Dqs   = [Dqs(:,mask) , Dq];
+            end
+            
         end
 
-        
+
+
+
+        % ------------------------------------------------------------ %
+        %                      Time Step Adjuster                      %
+        % ------------------------------------------------------------ %
         function [q,Dq,t,dt] = adjudicateSolution(q,Dq,qold,Dqold,t,dt,stats)
+            
             if  (stats.relativeErrorEstimate > relativeTolerance) || ...
                 (stats.absoluteErrorEstimate > absoluteTolerance) || ...
                 any(strcmpi(stats.returnStatus,...
-                    {'IterationMaximumReached','HookExitRequest'}))
-                
+                    {'TooSmallStepNorm','IterationMaximumReached','HookExitRequest'}))
+
+                % -------------------------------------------------- %
+                %                        Failed                      %
+                % -------------------------------------------------- %
+                %
                 %   Adjust time step
                 fallbacks = [1,fallbacks(1:24)]  ;
                 dt        = max([dt*2^(-sum(fallbacks(1:5))),stepMin]) ;
@@ -137,7 +177,11 @@ function evolver = Evolver(config)
                 fprintf('Fallback\n');
 
             else
-                
+
+                % -------------------------------------------------- %
+                %                       Suceeded                     %
+                % -------------------------------------------------- %
+                %
                 %   Update
                 t  = t + dt;
                 fprintf(...
@@ -162,9 +206,9 @@ function evolver = Evolver(config)
     function varargout = getData()
         switch (nargout)
             case 2
-                varargout = {qs,saveTimes};
+                varargout = {qs,times};
             case 3
-                varargout = {qs,Dqs,saveTimes};
+                varargout = {qs,Dqs,times};
         end
     end
     

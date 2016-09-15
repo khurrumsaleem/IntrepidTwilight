@@ -53,10 +53,11 @@ function q2Dup = Quasi2DUpwind(config)
     % =================================================== %
     %                   Self-Parameters                   %
     % =================================================== %
-    q2Dup.set('epsilon'                 ,1E-8   );
-    q2Dup.set('dimensionalizer.mass'    ,1      );
-    q2Dup.set('dimensionalizer.energy'  ,1      );
-    q2Dup.set('dimensionalizer.momentum',1      );
+    q2Dup.set('epsilon'                 , 1E-6  );
+    q2Dup.set('dimensionalizer.mass'    , 1     );
+    q2Dup.set('dimensionalizer.energy'  , 1     );
+    q2Dup.set('dimensionalizer.momentum', 1     );
+    q2Dup.set('isDynamicVolume'         , true  );
     if (nargin >= 1)
         q2Dup.set(config);
     end
@@ -96,7 +97,7 @@ function q2Dup = Quasi2DUpwind(config)
     volumeDim   = [];
     momentumDim = [];
     %
-    epsilon = 1E-7;
+    epsilon = 1E-8;
     
     
     % ------------------------------- %
@@ -111,19 +112,16 @@ function q2Dup = Quasi2DUpwind(config)
     
     
     %   Velocities
-    vCV     = [];
-    vMC     = [];
-    
+    vCV = [];
+    vI  = [];
     
     %   Connectivity Arrays: Control Volume sense
     from  = [] ;
     to    = [] ;
     
-    
     %   Connectivity Arrays: Momentum Interface sense
     up    = [] ;
     down  = [] ;
-    
     
     %   Indexing arrays
     nCV = [] ;
@@ -146,24 +144,20 @@ function q2Dup = Quasi2DUpwind(config)
     volMC         = []  ;
     volMCFracFrom = []  ;
     volMCFracTo   = []  ;
-    %     massMCFrom    = []  ;
-    %     massMCTo      = []  ;
     massMC        = []  ;
-    
     
     %   Conserved quantity sources
     sMass     = [] ;
     sEnergy   = [] ;
     sMomentum = [] ;
-    
-    
+
     %   Momentum RHS Parameters
     LoD      = [] ;
     flowArea = [] ;
     Ainter   = [] ;
     
     
-    %   Various orientation dependent vector
+    %   Various orientation dependent vectors
     upDotN   = []   ;
     downDotN = []   ;
     nX       = []   ;
@@ -182,11 +176,10 @@ function q2Dup = Quasi2DUpwind(config)
     
     
     %   Miscellaneous
-    time  = 0               ;
-    dfdq  = []              ;
-    TD    = struct('T',[])  ;
-    state = struct()        ;
-    
+    time      = 0               ;
+    dfdq      = []              ;
+    TD        = struct('T',[])  ;
+    isDynamic = true()          ;
     
     
     
@@ -256,7 +249,6 @@ function q2Dup = Quasi2DUpwind(config)
         
         % Momentum
         flowArea = model.momentumCell.flowArea          ;
-%         friction = model.momentumCell.source.friction   ;
         LoD      = model.momentumCell.LoD               ;
         
         
@@ -303,19 +295,23 @@ function q2Dup = Quasi2DUpwind(config)
         
         % Summation matrices
         [Ccv,Cmc,Cinter,iI] = ...
-            IntrepidTwilight.AdamantWave.toolbox.GetSummationMatrices([from,to],[up,down],[upDotN,downDotN]);
+            IntrepidTwilight.AdamantWave.toolbox.GetSummationMatrices(...
+                [from,to],[up,down],[upDotN,downDotN]);
         
         
         % Initialization for inclusion into the closure environment
         massMC = 0;
         vCV    = 0;
-        vMC    = 0;
+        vI     = 0;
         dfdq   = {zeros(nCV) ; zeros(nCV)  ; zeros(nCV) ; zeros(nMC)};
         
     end
     
     function [] = assignSelfValues()
-        epsilon = q2Dup.get('epsilon');
+        epsilon   = q2Dup.get('epsilon')        ;
+        isDynamic = q2Dup.get('isDynamicVolume');
+        q2Dup.set('isDynamic',...
+            [isDynamic;isDynamic;isDynamic.*isElastic;ones(nMC,1)]);
     end
     
     
@@ -369,13 +365,15 @@ function q2Dup = Quasi2DUpwind(config)
         q = momentum ./ momentumDim;
     end
     function q = getAll()
-        q = [   getMass()       ;
+        q = [...
+            getMass()       ;
             getEnergy()     ;
             getVolume()     ;
             getMomentum()   ];
     end
     function q = getFast()
-        q = [   getMass()   ;
+        q = [...
+            getMass()   ;
             getEnergy() ;
             getVolume() ];
     end
@@ -392,13 +390,15 @@ function q2Dup = Quasi2DUpwind(config)
     
     %   Give dimensions
     function q = makeDimensional(q)
-        q = [   q(iM) .* massDim     ;
+        q = [...
+            q(iM) .* massDim     ;
             q(iE) .* energyDim   ;
             q(iV) .* volumeDim   ;
             q(iP) .* momentumDim ];
     end
     function q = makeFastDimensional(q)
-        q = [   q(iM) .* massDim     ;
+        q = [...
+            q(iM) .* massDim     ;
             q(iE) .* energyDim   ;
             q(iV) .* volumeDim   ];
     end
@@ -407,13 +407,15 @@ function q2Dup = Quasi2DUpwind(config)
     end
     %   Take dimensions
     function q = makeDimensionless(q)
-        q = [   q(iM) ./ massDim     ;
+        q = [...
+            q(iM) ./ massDim     ;
             q(iE) ./ energyDim   ;
             q(iV) ./ volumeDim   ;
             q(iP) ./ momentumDim ];
     end
     function q = makeFastDimensionless(q)
-        q = [   q(iM) ./ massDim     ;
+        q = [...
+            q(iM) ./ massDim     ;
             q(iE) ./ energyDim   ;
             q(iV) ./ volumeDim   ];
     end
@@ -429,18 +431,19 @@ function q2Dup = Quasi2DUpwind(config)
     function f = rhs(q,t)
         
         % Pull conserved values
-        mass     = q(iM) .* massDim      ;
-        energy   = q(iE) .* energyDim    ;
-        volume   = q(iV) .* volumeDim    ;
-        momentum = q(iP) .* momentumDim  ;
+        mass     = q(iM) .* massDim     ;
+        energy   = q(iE) .* energyDim   ;
+        volume   = q(iV) .* volumeDim   ;
+        momentum = q(iP) .* momentumDim ;
         time     = t                    ;
         
         updateClosureEnvironment();
         
-        f = [   rhsMass()     ./ massDim     ;
-            rhsEnergy()   ./ energyDim   ;
-            rhsVolume()   ./ volumeDim   ;
-            rhsMomentum() ./ momentumDim ];
+        f = [...
+            rhsMass()     ./ massDim   .* isDynamic ;
+            rhsEnergy()   ./ energyDim .* isDynamic ;
+            rhsVolume()   ./ volumeDim .* isDynamic ;
+            rhsMomentum() ./ momentumDim            ];
     end
     
     
@@ -449,22 +452,23 @@ function q2Dup = Quasi2DUpwind(config)
     % =================================================== %
     function f = rhsFast(q,t)
         % Pull conserved values
-        mass   = q(iM) .* massDim    ;
-        energy = q(iE) .* energyDim  ;
-        volume = q(iV) .* volumeDim  ;
+        mass   = q(iM) .* massDim   ;
+        energy = q(iE) .* energyDim ;
+        volume = q(iV) .* volumeDim ;
         time   = t                  ;
         
         updateThermodynamicState();
         
-        f = [   rhsMass()   ./ massDim   ;
-            rhsEnergy() ./ energyDim ;
-            rhsVolume() ./ volumeDim ];
+        f = [...
+            rhsMass()   ./ massDim   .* isDynamic ;
+            rhsEnergy() ./ energyDim .* isDynamic ;
+            rhsVolume() ./ volumeDim .* isDynamic ];
         
     end
     function f = rhsSlow(q,t)
         
         %	Pull conserved values
-        momentum = q .* momentumDim  ;
+        momentum = q .* momentumDim ;
         time     = t                ;
         
         %   Get flux term
@@ -491,7 +495,7 @@ function q2Dup = Quasi2DUpwind(config)
         
         % Advection term
         rhod  = (vCV >= 0) .* TD.rho(from)  +...
-            (vCV <  0) .* TD.rho(to)    ;
+                (vCV <  0) .* TD.rho(to)    ;
         vzRho =  vCV .* flowArea .* rhod    ;
         
         % Total RHS
@@ -518,7 +522,7 @@ function q2Dup = Quasi2DUpwind(config)
         
         % Advection term
         rhohd  = (vCV >= 0) .* TD.rhoh(from)    +...
-            (vCV <  0) .* TD.rhoh(to)      ;
+                 (vCV <  0) .* TD.rhoh(to)      ;
         vzRhoh =  vCV .* flowArea .* rhohd      ;
         
         % Total RHS
@@ -565,26 +569,25 @@ function q2Dup = Quasi2DUpwind(config)
         if (nargin >= 2)
             time = t;
         end
-        
+
         %   Intensive momentum
         rhov = momentum ./ volMC ;
         
-        % Upwind/downwind momentum advection
-        isDownwind = (vMC >= 0) ;
-        isUpwind   = ~isDownwind;
-        momd       = isDownwind .* momentum(up) + isUpwind .* momentum(down);
-        zjnj       = isDownwind .* upDotN   + isUpwind .* downDotN          ;
-        massMC     = volMCFracFrom .* mass(from) + volMCFracTo .* mass(to)  ;
-        fmom       = momd.^2./(volMC .* massMC) .* zjnj .* Ainter           ;
+        %   Calculate momentum exchange term
+        isDownwind = (vI > 0)                                               ;
+        isUpwind   = not(isDownwind)                                        ;
+        vIrhov     = vI .* (isDownwind .* rhov(up) + isUpwind .* rhov(down));
         
-        sense = sign(momd);
-        sense(sense == 0) = 1;
-        
-        fFriction = frictionFactor(abs(rhov),volMC./flowArea,1E-3);
+        % Get the friction factor
+        args      = FilterList(from,abs(rhov),abs(vCV),1E-4)                            ;
+        fFricFrom = frictionFactor(args{:},volMCfrom./flowArea,structFilter(TD,from))   ;
+        args      = FilterList(to,abs(rhov),abs(vCV),1E-4)                              ;
+        fFricTo   = frictionFactor(args{:},volMCto./flowArea,structFilter(TD,to))       ;
+        fFriction = volMCFracFrom .* fFricFrom + volMCFracTo .* fFricTo                 ;
         
         % Pieces
-        advect = 0*Cmc*(fmom.*Ainter) - (Cinter*(TD.P(iI).*Ainter))     ;
-        buoy   = gizi .* massMC                                ;
+        advect = Cmc*(vIrhov.*Ainter) - Cinter*(TD.P(iI).*Ainter)       ;
+        buoy   = gizi .* massMC                                         ;
         fric   = -fFriction .* LoD .* abs(rhov) .* vCV .* flowArea / 2  ;
         
         % Total RHS
@@ -605,34 +608,48 @@ function q2Dup = Quasi2DUpwind(config)
     %}
     
     function [] = updateClosureEnvironment()
-        updateVelocity();
         updateThermodynamicState();
+        updateVelocity();
     end
     
     function [] = updateVelocity()
+
         % Volume-average density and CV surface velocities
-        volMCfrom = volMCFracFrom .* volume(from)                          ;
-        volMCto   = volMCFracTo   .* volume(to)                            ;
-        volMC     = volMCfrom +  volMCto                                   ;
-        massMC    = volMCFracFrom .* mass(from) + volMCFracTo .* mass(to)  ;
-        vCV       = momentum ./ massMC                                     ;
+        volMCfrom = volMCFracFrom .* volume(from)                           ;
+        volMCto   = volMCFracTo   .* volume(to)                             ;
+        volMC     = volMCfrom +  volMCto                                    ;
+        massMC    = volMCFracFrom .* mass(from) + volMCFracTo .* mass(to)   ;
+        vCV       = momentum ./ massMC                                      ;
         
         %   Momentum cell interface velocity
-        vMC = (vCV(up) .* upDotN + vCV(down) .* downDotN) / 2;
+        vI = (momentum(up) .* upDotN + momentum(down) .* downDotN) ./   ...
+                         (massMC(up) + massMC(down))                    ;
         
     end
     
     function [] = updateThermodynamicState()
         % Thermodynamic properites
-        TD.rho       = mass   ./ volume                 ;
-        TD.e         = energy ./ mass                   ;
-        [TD.T,state] = Temperature(TD.rho,TD.e,TD.T)    ;
-        TD.rhoL      = state.rhoL                       ;
-        TD.rhoG      = state.rhoG                       ;
-        TD.x         = state.x                          ;
-        TD.isTwoPhi  = state.isTwoPhi                   ;
-        TD.P         = Pressure(TD.rho,TD.T,false,state);
-        TD.rhoh      = energy ./ volume + TD.P          ;
+        TD.rho    = mass   ./ volume               ;
+        TD.i      = energy ./ mass                 ;
+        [~,TD]    = Temperature(TD.rho,TD.i,TD.T)  ;
+        TD.P      = Pressure(TD.rho,TD.T,true,TD)  ;
+        TD.rhoh   = energy ./ volume + TD.P        ;
+        
+        
+        
+        if (numel(TD.P) <= nCV)
+            if any(TD.P > 2*TD.P(1)) || any(TD.P < 10E3)
+                TD.P(1) = NaN;
+            end
+            if any(TD.T > 10*TD.T(1))
+                TD.P(1) = NaN;
+            end
+        end
+        
+        if any(isnan([TD.P;TD.T]))
+            g = [];
+        end
+        
     end
     
     
@@ -644,7 +661,7 @@ function q2Dup = Quasi2DUpwind(config)
     %}
     
     %   Phase-safe friction factor function
-    function f = frictionFactor(rhov,Lchar,roughness)
+    function f = frictionFactor(rhov,v,roughness,Lchar,TD)
         
         %   Scalar expansion
         if isscalar(Lchar)
@@ -662,13 +679,14 @@ function q2Dup = Quasi2DUpwind(config)
         isOnePhi = not(isTwoPhi);
         
         %   Get kinematic numbers
-        mu  = Viscosity(TD.rho,TD.T);
-        Re  = rhov .* Lchar ./ mu   ;
-        eoD = roughness ./ Lchar    ;
-        
+        mu  = Viscosity(TD.rho,TD.T,true,TD);
+        Re  = rhov .* Lchar ./ mu           ;
+        eoD = roughness ./ Lchar            ;
+
+
         %   One-phase friction factor
         if any(isOnePhi)
-            f(isOnePhi) = kinematicFrictionFactor(Re(isOnePhi),eoD(isOnePhi));
+            f(isOnePhi) = kinematicFrictionFactor(Re(isOnePhi),eoD(isOnePhi)) ;
         end
         
         %   Two-phase friction factor
@@ -678,36 +696,40 @@ function q2Dup = Quasi2DUpwind(config)
             %   As presented in "Convective Boiling and Condensation" by Collier and
             %   Thome.
             
-            %   Mask properties
-            rhov = rhov(isTwoPhi)   ;
-            rho  = TD.rho(isTwoPhi) ;
-            rhoL = TD.rhoL(isTwoPhi);
-            rhoG = TD.rhoG(isTwoPhi);
-            T    = TD.T(isTwoPhi)   ;
-            x    = TD.x(isTwoPhi)   ;
-            eoD  = eoD(isTwoPhi)    ;
+            %   Mask properties for from
+            rhov    = rhov(isTwoPhi)            ;
+            v       = v(isTwoPhi)               ;
+            Lchar   = Lchar(isTwoPhi)           ;
+            eoD     = eoD(isTwoPhi)             ;
+            TD      = structFilter(TD,isTwoPhi) ;
+            rhoL    = TD.rhoL                   ;
+            rhoG    = TD.rhoG                   ;
+            x       = TD.x                      ;
+            T       = TD.T                      ;
             
             %   Liquid/Gas Reynolds numbers and friction factors
-            muL  = Viscosity(rhoL,T)                ;
-            muG  = Viscosity(rhoG,T)                ;
-            ReL  = rhov .* Lchar ./ muL             ;
-            ReG  = rhov .* Lchar ./ muG             ;
-            fL0  = kinematicFrictionFactor(ReL,eoD) ;
-            fG0  = kinematicFrictionFactor(ReG,eoD) ;
+            muL  = Viscosity(rhoL,T,true,TD)            ;
+            muG  = Viscosity(rhoG,T,true,TD)            ;
+            ReL  = rhov .* Lchar ./ muL                 ;
+            ReG  = rhov .* Lchar ./ muG                 ;
+            fL0  = kinematicFrictionFactor(ReL,eoD)/4   ;
+            fG0  = kinematicFrictionFactor(ReG,eoD)/4   ;
              
             %   Correlation for two-phase friction multiplier
             A1     = (1-x).^2 + x.^2 .* ( rhoL.*fG0 ./ (rhoG.*fL0) );
-            A2     = x.^0.78 .* (1-x).^0.224;
+            A2     = x.^0.78 .* (1-x).^0.24;
             A3     = (rhoL./rhoG).^0.91 .* (muG./muL).^0.19 .* (1-muG./muL).^0.7;
-            Fr     = (rhov./rho).^2 ./(9.81*Lchar);
+            Fr     = v.^2 ./(9.81*Lchar);
             sigma  = SurfaceTension(T);
-            We     = rhov.^2 .* Lchar ./(rho .* sigma);
+            We     = (rhov .* v) .* Lchar ./ sigma;
             phi2f0 = A1 + 3.24 * A2.*A3./(Fr.^0.045.*We.^0.035);
             
             %   Two-phase friction factor
             f(isTwoPhi) = phi2f0 .* fL0;
             
         end
+        
+        f = real(f);
         
     end
 
@@ -717,10 +739,9 @@ function q2Dup = Quasi2DUpwind(config)
         %{
 
         Implements the smooth laminar equation and turbulent Serghides
-        correlation (1984) for the Darcy friction factor as presented in "New
-        correlations of single-phase friction factor for turbulent pipe flow
-        and evaluation of existing single-phase friction factor correlations"
-        (2011) by Fang, Xu, Zhou.
+        correlation (1984) for the Darcy friction factor as presented in 
+        "Explicit Friction Factor Accuracy and Computational Efficiency for 
+        Turbulent Flow in Pipes" (2013) by Coole, Winning.
 
         Log-Linear interpolation is used in the kinematic transition regime.
 
@@ -745,8 +766,8 @@ function q2Dup = Quasi2DUpwind(config)
             eoDT = eoD(isTurbulent)/3.7;
             a = -2*log(12     ./ ReT + eoDT);
             b = -2*log(2.51*a ./ ReT + eoDT);
-            c = -2*log(2.51   ./ ReT + eoDT);
-            f(isTurbulent) = 1./(a-(b-a).^2./(c-2*b-a)).^2;
+            c = -2*log(2.51*b ./ ReT + eoDT);
+            f(isTurbulent) = ( a  -  (b-a).^2./(c-2*b+a) ).^(-2);
         end
         
         %   Transition
@@ -759,8 +780,8 @@ function q2Dup = Quasi2DUpwind(config)
             eoDT = eoD(isTransition)/3.7;
             a     = -2*log10(12     ./ 4000 + eoDT) ;
             b     = -2*log10(2.51*a ./ 4000 + eoDT) ;
-            c     = -2*log10(2.51   ./ 4000 + eoDT) ;
-            fTurb = 1./(a-(b-a).^2./(c-2*b-a)).^2   ;
+            c     = -2*log10(2.51*b ./ 4000 + eoDT) ;
+            fTurb = (a-(b-a).^2./(c-2*b+a)).^(-2)   ;
             
             %   Log-linear interpolation
             logRe = log10(Re(isTransition))   ;
@@ -773,6 +794,8 @@ function q2Dup = Quasi2DUpwind(config)
             f(isTransition) = wTurb.*fTurb + wLam.*fLam;
             
         end
+        
+        f = real(f);
         
     end
     
@@ -820,7 +843,7 @@ function q2Dup = Quasi2DUpwind(config)
         rhoBlock      = TD.rho      ;
         rhoLBlock     = TD.rhoL     ;
         rhoGBlock     = TD.rhoG     ;
-        eBlock        = TD.e        ;
+        eBlock        = TD.i        ;
         Tblock        = TD.T        ;
         Pblock        = TD.P        ;
         rhohBlock     = TD.rhoh     ;
@@ -828,15 +851,16 @@ function q2Dup = Quasi2DUpwind(config)
         isTwoPhiBlock = TD.isTwoPhi ;
         
         %   Create unmutated TD struct
-        TDref.rho      = rhoBlock(1:nCV)        ;
-        TDref.rhoL     = rhoLBlock(1:nCV)       ;
-        TDref.rhoG     = rhoGBlock(1:nCV)       ;
-        TDref.e        = eBlock(1:nCV)          ;
-        TDref.T        = Tblock(1:nCV)          ;
-        TDref.P        = Pblock(1:nCV)          ;
-        TDref.rhoh     = rhohBlock(1:nCV)       ;
-        TDref.x        = xBlock(1:nCV)          ;
-        TDref.isTwoPhi = isTwoPhiBlock(1:nCV)   ;
+        TDref = structFilter(TD,1:nCV);
+%         TDref.rho      = rhoBlock(1:nCV)        ;
+%         TDref.rhoL     = rhoLBlock(1:nCV)       ;
+%         TDref.rhoG     = rhoGBlock(1:nCV)       ;
+%         TDref.e        = eBlock(1:nCV)          ;
+%         TDref.T        = Tblock(1:nCV)          ;
+%         TDref.P        = Pblock(1:nCV)          ;
+%         TDref.rhoh     = rhohBlock(1:nCV)       ;
+%         TDref.x        = xBlock(1:nCV)          ;
+%         TDref.isTwoPhi = isTwoPhiBlock(1:nCV)   ;
         
         %   Store compressed perturbed vectors and reset closure variables
         massTD     = [ massRef     ; massTD     ]   ;
@@ -886,7 +910,7 @@ function q2Dup = Quasi2DUpwind(config)
             %   Reset
             mass(k)    = massRef(k)     ;
             TD.rho(k)  = TDref.rho(k)   ;
-            TD.e(k)    = TDref.e(k)     ;
+            TD.i(k)    = TDref.i(k)     ;
             TD.T(k)    = TDref.T(k)     ;
             TD.P(k)    = TDref.P(k)     ;
             TD.rhoh(k) = TDref.rhoh(k)  ;
@@ -926,7 +950,7 @@ function q2Dup = Quasi2DUpwind(config)
             %   Reset
             energy(k)  = energyRef(k)   ;
             TD.rho(k)  = TDref.rho(k)   ;
-            TD.e(k)    = TDref.e(k)     ;
+            TD.i(k)    = TDref.i(k)     ;
             TD.T(k)    = TDref.T(k)     ;
             TD.P(k)    = TDref.P(k)     ;
             TD.rhoh(k) = TDref.rhoh(k)  ;
@@ -1008,7 +1032,7 @@ function q2Dup = Quasi2DUpwind(config)
             %   Reset
             momentum(k) = momentumRef(k);
             TD.rho(k)   = TDref.rho(k)  ;
-            TD.e(k)     = TDref.e(k)    ;
+            TD.i(k)     = TDref.i(k)    ;
             TD.T(k)     = TDref.T(k)    ;
             TD.P(k)     = TDref.P(k)    ;
             TD.rhoh(k)  = TDref.rhoh(k) ;

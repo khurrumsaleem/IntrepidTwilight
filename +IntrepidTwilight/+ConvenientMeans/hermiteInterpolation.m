@@ -10,6 +10,13 @@ function y = hermiteInterpolation(xs,ys,Dys,x)
     [m,~] = size(ys)                ;
     n     = nnz(iC0) + nnz(iC1) - 1 ;
 
+    
+    if (n < 1)
+        y = x*NaN;
+        return;
+    end
+        
+        
     %   Scale
     mu    = mean(xs);
     sigma = std(xs);
