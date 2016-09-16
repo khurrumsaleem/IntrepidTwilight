@@ -629,11 +629,11 @@ function q2Dup = Quasi2DUpwind(config)
     
     function [] = updateThermodynamicState()
         % Thermodynamic properites
-        TD.rho    = mass   ./ volume               ;
-        TD.i      = energy ./ mass                 ;
-        [~,TD]    = Temperature(TD.rho,TD.i,TD.T)  ;
-        TD.P      = Pressure(TD.rho,TD.T,true,TD)  ;
-        TD.rhoh   = energy ./ volume + TD.P        ;
+        TD.rho    = mass   ./ volume                ;
+        TD.i      = energy ./ mass                  ;
+        [~,TD]    = Temperature(TD.rho,TD.i,400+TD.i*0)        ;
+        TD.P      = Pressure(TD.rho,TD.T,true,TD)   ;
+        TD.rhoh   = energy ./ volume + TD.P         ;
         
         
         
@@ -641,8 +641,8 @@ function q2Dup = Quasi2DUpwind(config)
             if any(TD.P > 2*TD.P(1)) || any(TD.P < 10E3)
                 TD.P(1) = NaN;
             end
-            if any(TD.T > 10*TD.T(1))
-                TD.P(1) = NaN;
+            if any(TD.T > 1.5*TD.T(1))
+                g = [];
             end
         end
         

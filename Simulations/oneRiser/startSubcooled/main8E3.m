@@ -1,5 +1,5 @@
 clc();
-% clear();
+clear();
 
 T0 = linspace(300,372,20);%373,373.1];
 P0 = linspace(1,2,20)*101325;
@@ -28,12 +28,12 @@ tall = tic;
 for k = 1:m
     %
     %   Setup
-    hem = testHEM(P0(k),T0(k),q0,newstate{:});
+    hem = testHEM8kW(P0(k),T0(k),q0,newstate{:});
     hem.set('evolver','time.span'         , [0,2000] );
     hem.set('evolver','time.terminator'   , ...
         constructTerminator(hem.get('evolver','initialCondition')));
     hem.set('evolver','time.step.maximum' ,    dt    );
-    hem.set('evolver','time.step.minimum' ,   1E-12  );
+    hem.set('evolver','time.step.minimum' ,   1E-8  );
     hem.set('evolver','time.step.goal'    ,   dt     );
     hem.set('evolver','saveRate'          ,   10   );
     %

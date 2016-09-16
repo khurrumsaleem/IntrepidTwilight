@@ -1,4 +1,4 @@
-function hem = testHEMSat(P0,T0,q0,mass,energy,~,momentum,T,P)
+function hem = testHEMSat(P0,T0,q0,mass,energy,volume,momentum,T,P)
     %   Numbers for normals
     r2 = cos(pi/4);
     s2 = sqrt(2);
@@ -47,16 +47,16 @@ function hem = testHEMSat(P0,T0,q0,mass,energy,~,momentum,T,P)
         
         tstart = -1;
         thold  = 0;
+        
     else
         
-        [Psat,~,~] = SaturationStateGivenTemperature(T)             ;
-        deltaP     = P0 - P(1)                                      ;
-        P          = P + deltaP                                     ;
-        might1phi  = P > Psat                                       ;
-        deltaT     = T0 - T(1)                                      ;
-        T          = (T + deltaT).*might1phi + T0.*not(might1phi)   ;
-        rho        = Density(P,T)                                   ;
-        i          = InternalEnergy(rho,T)                          ;
+        deltaP     = P0 - P(1)              ;
+        P          = P + deltaP             ;
+        deltaT     = T0 - T(1)              ;
+        T          = (T + deltaT)           ;
+        [~,state]  = Temperature(mass./volume,energy./mass);
+        rho        = Density(P,T,state.x)   ;
+        i          = InternalEnergy(rho,T)  ;
         
         
         %   Define extensive properties
@@ -136,15 +136,18 @@ function hem = testHEMSat(P0,T0,q0,mass,energy,~,momentum,T,P)
     hem.set('evolver','initialCondition'  , [mass;energy;volume;momentum]   );
     hem.set('evolver','tolerance.relative',0.10);
     hem.set('evolver','tolerance.absolute',100 );
-end
-
-function dq = guardStep(q,dq)
-%     while any( abs(dq(1:14*3)) > abs(0.0001*q(1:14*3)) )
-%         dq = 0.5 * dq;
-%     end
-    while any( (q(1:14*3) - dq(1:14*3)) < 0 )
-        dq = 0.5 * dq;
+    
+    
+    function dq = guardStep(q,dq)
+        %     while any( abs(dq(1:14*3)) > abs(0.0001*q(1:14*3)) )
+        %         dq = 0.5 * dq;
+        %     end
+        dq(1:14*3) = dq(1:14*3).*[[false;true(13,1)];[false;true(13,1)];[false;true(13,1)]];
+        while any( (q - dq) < 0 )
+            dq = 0.5 * dq;
+        end
     end
+    
 end
 
 

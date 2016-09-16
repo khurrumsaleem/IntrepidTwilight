@@ -7,7 +7,7 @@ function term = constructTerminator(q0)
     
     
     function stop = terminator(t,q,Dq)
-        if (t > 6)
+        if (t > 2)
             qs         = [qs(:,2:10),q] ;
             ts         = [ts(2:10),t]   ;
             liveCounts = liveCounts + 1 ;
