@@ -15,7 +15,7 @@ function term = constructTerminator(q0)
                 (mean(max(abs(diff(qs,[],2)./qs(:,1:9)),[],1)) < 1E-3)  && ...
                 (mean(diff(ts)) > 1E-1)    && (liveCounts >= 10)        ;
             slopeWise  = all(abs(Dq) < 10) && (liveCounts >= 1)         ;
-            stop       = (valueWise || slopeWise)                       ;
+            stop       = slopeWise                                      ;
         else
             stop = false;
         end
