@@ -264,7 +264,7 @@ function q2Dup = Quasi2DUpwind(config)
         iM  = 1:nCV                 ;
         iE  = iM + nCV              ;
         iV  = iE + nCV              ;
-        iP  = iV + nCV              ;
+        iP  = iV(end) + (1:nMC)          ;
         %
         q2Dup.set('indices.fast',[iM(:);iE(:);iV(:)]);
         q2Dup.set('indices.slow',iP(:));
@@ -547,10 +547,10 @@ function q2Dup = Quasi2DUpwind(config)
         %         end
         
         % Advection term
-        vzVolume = vCV .* flowArea .* isElastic;
+        vzVolume = vCV .* flowArea ;
         
         % Total RHS
-        f = Ccv*(vzVolume);
+        f = (Ccv*(vzVolume)) .* isElastic;
         
     end
     
@@ -1031,11 +1031,11 @@ function q2Dup = Quasi2DUpwind(config)
             
             %   Reset
             momentum(k) = momentumRef(k);
-            TD.rho(k)   = TDref.rho(k)  ;
-            TD.i(k)     = TDref.i(k)    ;
-            TD.T(k)     = TDref.T(k)    ;
-            TD.P(k)     = TDref.P(k)    ;
-            TD.rhoh(k)  = TDref.rhoh(k) ;
+%             TD.rho(k)   = TDref.rho(k)  ;
+%             TD.i(k)     = TDref.i(k)    ;
+%             TD.T(k)     = TDref.T(k)    ;
+%             TD.P(k)     = TDref.P(k)    ;
+%             TD.rhoh(k)  = TDref.rhoh(k) ;
             
         end
         
