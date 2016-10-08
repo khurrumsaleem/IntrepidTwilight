@@ -1,6 +1,6 @@
 clc();
 % clear();
-T0 = 372:390;
+T0 = 372*ones(5,1);
 P0 = SaturationStateGivenTemperature(T0);
 
 %   372K steady-state/ 1kW
@@ -21,8 +21,8 @@ Tg        = Temperature(mass0./volume0,energy0./mass0);
 Pg        = Pressure(mass0./volume0,Tg);
 
 %   Adjust evolver time stuff
-dt            = 20          ;
-m             = numel(P0)   ;
+dt          = 0.1         ;
+m           = numel(P0)   ;
 tElapsed(m) = 0           ;
 q{m}        = []          ;
 Dq{m}       = []          ;
@@ -37,20 +37,20 @@ T{m}        = []          ;
 state{m}    = []          ;
 P{m}        = []          ;
 newstate    = {mass0,energy0,volume0,momentum0,Tg,Pg};
-q0          = 1000        ;
+q0          = [2:4:14,16]*1E3;
 
 tall = tic;
 for k = m:m
     %
     %   Setup
-    hem = testHEMSat(P0(k),T0(k),q0,newstate{:});
-    hem.set('evolver','time.span'         , [0,5000] );
+    hem = testHEMSat(P0(k),T0(k),q0(k),newstate{:});
+    hem.set('evolver','time.span'         , [0,500] );
     hem.set('evolver','time.terminator'   , ...
         constructTerminator(hem.get('evolver','initialCondition')));
     hem.set('evolver','time.step.maximum' ,    dt    );
     hem.set('evolver','time.step.minimum' ,   1E-12  );
     hem.set('evolver','time.step.goal'    ,   dt     );
-    hem.set('evolver','saveRate'          ,   10   );
+    hem.set('evolver','saveRate'          ,   0.05   );
     %
     %   Run
     trun = tic;

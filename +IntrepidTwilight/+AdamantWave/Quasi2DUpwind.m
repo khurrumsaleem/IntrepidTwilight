@@ -638,9 +638,6 @@ function q2Dup = Quasi2DUpwind(config)
         
         
         if (numel(TD.P) <= nCV)
-            if any(TD.P > 2*TD.P(1)) || any(TD.P < 10E3)
-                TD.P(1) = NaN;
-            end
             if any(TD.T > 1.5*TD.T(1))
                 g = [];
             end

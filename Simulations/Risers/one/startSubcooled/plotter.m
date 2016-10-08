@@ -2,8 +2,6 @@ clc();
 clear();
 clf();
 
-
-
 xCanon = [0;0.1;0.1;0];
 yCanon = [0;0;0.1;0.1];
 
@@ -31,9 +29,8 @@ spI   = {1,5,6,8,10};
 minT = Inf;
 maxT = 0;
 
-var = 'P';
+var = 'rho';
 n = 1;
-
 
 for k = 1:numel(Qdots)
     q = load(['q_',num2str(Qdots(k),'%02G'),'kW.mat']);
@@ -59,7 +56,7 @@ for k = 1:numel(Qdots(1:end-1))
 end
 power = num2str(Qdots(end),'%02G');
 q = load(['q_',power,'kW.mat']);
-    power = ['$',num2str(Qdots(k),'%2G'),'$ kW'];
+    power = ['$',num2str(Qdots(end),'%2G'),'$ kW'];
 subplot(2,5,spI{end});
 p = patch(xG,yG,q.(var){end,n}(:,end));
 p.Parent.TickLabelInterpreter = 'latex';
@@ -73,5 +70,47 @@ subplot(2,5,8);
 c = colorbar('AxisLocation','out','Location','north');
 c.Limits = [minT,maxT];
 c.Label.Interpreter = 'latex';
-c.Label.String = '$P$ [Pa]';
+c.Label.String = '$\rho$ [kg/m${}^{3}$]';
+
+
+% 
+% for k = 1:numel(Qdots)
+%     q = load(['q_',num2str(Qdots(k),'%02G'),'kW.mat']);
+%     minT = min([minT;q.(var){end,n}(:,end)]);
+%     maxT = max([maxT;q.(var){end,n}(:,end)]);
+% end
+% q = load(['q_',num2str(Qdots(end),'%02G'),'kW.mat']);
+% minT = min([minT;q.(var){end,n}(:,end)]);
+% maxT = max([maxT;q.(var){end,n}(:,end)]);
+%     
+% for k = 1:numel(Qdots(1:end-1))
+%     power = num2str(Qdots(k),'%02G');
+%     q = load(['q_',power,'kW.mat']);
+%     power = ['$',num2str(Qdots(k),'%2G'),'$ kW'];
+%     subplot(2,5,spI{k});
+%     p = patch(xG,yG,q.(var){end,n}(:,end));
+%     p.Parent.TickLabelInterpreter = 'latex';
+%     title(power,'interpreter','latex','FontWeight','normal');
+%     caxis([minT,maxT]);
+%     axis('tight');
+%     axis('equal');
+%     box('on');
+% end
+% power = num2str(Qdots(end),'%02G');
+% q = load(['q_',power,'kW.mat']);
+%     power = ['$',num2str(Qdots(end),'%2G'),'$ kW'];
+% subplot(2,5,spI{end});
+% p = patch(xG,yG,q.(var){end,n}(:,end));
+% p.Parent.TickLabelInterpreter = 'latex';
+% title(power,'interpreter','latex','FontWeight','normal');
+% axis('tight');
+% axis('equal');
+% box('on');
+% 
+% 
+% subplot(2,5,8);
+% c = colorbar('AxisLocation','out','Location','north');
+% c.Limits = [minT,maxT];
+% c.Label.Interpreter = 'latex';
+% c.Label.String = '$\rho$ [kg/m${}^{3}$]';
 

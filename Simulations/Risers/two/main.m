@@ -44,10 +44,10 @@ for k = 1:m
     [q{k},Dq{k},t{k}] = hem.results()       ;
     %
     %   Post-process
-    mass{k}         = q{k}( (1:14) + 0   ,:)    ;
-    energy{k}       = q{k}( (1:14) + 14  ,:)    ;
-    volume{k}       = q{k}( (1:14) + 14*2,:)    ;
-    momentum{k}     = q{k}( (1:14) + 14*3,:)    ;
+    mass{k}         = q{k}( (1:22) + 0   ,:)    ;
+    energy{k}       = q{k}( (1:22) + 22  ,:)    ;
+    volume{k}       = q{k}( (1:22) + 22*2,:)    ;
+    momentum{k}     = q{k}( (22*3):end   ,:)    ;
     rho{k}          = mass{k}   ./ volume{k}    ;
     i{k}            = energy{k} ./ mass{k}      ;
     [T{k},state{k}] = Temperature(rho{k},i{k})  ;

@@ -34,7 +34,7 @@ T{m}        = []          ;
 state{m}    = []          ;
 P{m}        = []          ;
 newstate    = {mass0,energy0,volume0,momentum0,Tg,Pg};
-q0          = 4000        ;
+q0          = 10000        ;
 
 tall = tic;
 for k = 1:m

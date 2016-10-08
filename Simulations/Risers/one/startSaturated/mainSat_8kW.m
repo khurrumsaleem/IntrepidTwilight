@@ -1,6 +1,6 @@
 clc();
 clear();
-T0 = 372:390;
+T0 = 372:0.2:390;
 P0 = SaturationStateGivenTemperature(T0);
 
 %   372K steady-state/ 1kW
@@ -18,8 +18,8 @@ Tg        = Temperature(mass0./volume0,energy0./mass0);
 Pg        = Pressure(mass0./volume0,Tg);
 
 %   Adjust evolver time stuff
-dt            = 20          ;
-m             = numel(P0)   ;
+dt          = 50          ;
+m           = numel(P0)   ;
 tElapsed(m) = 0           ;
 q{m}        = []          ;
 Dq{m}       = []          ;
@@ -34,7 +34,7 @@ T{m}        = []          ;
 state{m}    = []          ;
 P{m}        = []          ;
 newstate    = {mass0,energy0,volume0,momentum0,Tg,Pg};
-q0          = 6000        ;
+q0          = 8000        ;
 
 tall = tic;
 for k = 1:m
@@ -47,7 +47,7 @@ for k = 1:m
     hem.set('evolver','time.step.maximum' ,    dt    );
     hem.set('evolver','time.step.minimum' ,   1E-12  );
     hem.set('evolver','time.step.goal'    ,   dt     );
-    hem.set('evolver','saveRate'          ,   10   );
+    hem.set('evolver','saveRate'          ,  1E5 );
     %
     %   Run
     trun = tic;

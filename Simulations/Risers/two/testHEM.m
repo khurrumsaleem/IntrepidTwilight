@@ -92,12 +92,13 @@ function hem = testHEM(P0,T0,q0,mass,energy,~,momentum,T,P)
     %   Define initial state
     if (nargin < 4)
         %   Get densities and energies assuming incompressible, hydrostatic pressures
-        v0    = 0.1                                                     ; % [m/s]
+        v0    = 0.3                                                    ; % [m/s]
         rho0  = Density(P0,T0,0)                                        ;
         Pmax  = P0 + 9.81 * rho0 * 1.3                                  ;
         P     = [...
             linspace(P0,Pmax,6).';Pmax;linspace(Pmax,P0+0.2*9.81*rho0,5).';...
             Pmax;linspace(Pmax,P0,6).';P0;P0;P0];
+        T     = P*0 + T0;
         rho   = Density(P,P*0 + T0,P*0)                                 ;
         i     = InternalEnergy(rho,T0)                                  ;
         
