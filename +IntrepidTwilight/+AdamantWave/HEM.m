@@ -127,8 +127,11 @@ function evolver = buildFullEvolver(hem)
     % ======================================================================= %
     %                                 State                                   %
     % ======================================================================= %
-    state = IntrepidTwilight.executive.State()  ;
-    state = state.changeID(state,'HEMFull')     ;
+    component = 'state'                                                     ;
+    config    = components.(component).get()                                ;
+    name      = config.name                                                 ;
+	state     = IntrepidTwilight.executive.build('executive',name,config)   ;
+    state     = state.changeID(state,'HEMFull')                             ;
     
     
     %   Array used to store  previously calculated quantities
@@ -142,6 +145,7 @@ function evolver = buildFullEvolver(hem)
     %   Prepare
     state.prepare = @(varargin) prepare(varargin{:});
     isNotPrepared = true;
+    warehouse     = [];
     function [] = prepare(q,t,varargin)
         if isNotPrepared
             
@@ -157,6 +161,9 @@ function evolver = buildFullEvolver(hem)
             isDynamic     = sd.get('isDynamic')     ;
             isNotPrepared = false                   ;
             
+            %   Pull all state-set information
+            warehouse = state.get();
+
         end
     end
     
@@ -171,13 +178,25 @@ function evolver = buildFullEvolver(hem)
         q = sd.makeDimensionless(q);
         
         if (abs(dt) > 0)
+            
+            %   Offer a hook before anything changes
+            warehouse.hook.preupdate(q,t,dt);
+            
+            
             %   Update residual
             r.update(q,t,dt);
-            %
-            %   Perform a simple Euler step to knock solution off of current state
+
+            
+            % -----------------------------------------------------------------
+            %   Perform a Linearly Implicit Euler step in an attempt to 
+            %   find a good nonlinear search direction.
             q  = IntrepidTwilight.ConvenientMeans.linearlyImplicitEuler(...
                 @(q,t) sd.rhs(q,t),q,linspace(0,dt,2));
+            %
+            %   Adjust for dynamism
             dq = (q(:,1)-q(:,end)).*isDynamic;
+            %
+            %   Scale the LIE step since it is not nonlinearly stable.
             if not(any(isnan(dq))) && not(any(abs(imag(dq)) > eps()))
                 dq = r.guard.step(q(:,1),dq);
                 while any(abs(dq)>1E-12) && any(isnan(r.value(q(:,1) - dq)))
@@ -187,10 +206,10 @@ function evolver = buildFullEvolver(hem)
             else
                 q = q(:,1);
             end
-
+            % -----------------------------------------------------------------
+            
             %   Solve
             [q,stats] = solver.solve(q);
-
             
             %   Update data while accouting for a fallback
             tstore  = [t,tstore(1)]                     ;
@@ -198,6 +217,10 @@ function evolver = buildFullEvolver(hem)
             Dqstore = [sd.rhs(q,t+dt),Dqstore(:,1)]     ;
             Dq      = sd.makeDimensional(Dqstore(:,1))  ;
             q       = sd.makeDimensional(qstore(:,1))   ;
+
+
+            %   Offer a hook after the potentially new q is found
+            warehouse.hook.postupdate(q,t,dt,stats);
 
         else
             Dq      = sd.makeDimensional(sd.rhs(q,t))   ;

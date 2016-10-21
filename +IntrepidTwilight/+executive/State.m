@@ -4,11 +4,10 @@ function state = State(config)
     state = IntrepidTwilight.executive.Component();
     state = state.changeID(state,'state','state');
     
-    %    Parameters
-    if (nargin >= 1) && not(isempty(config))
-        state.set(config);
-    end
-
+    
+    %   Default sets
+    state.set('hook.preupdate'  , @(varargin)[]);
+    state.set('hook.postupdate' , @(varargin)[]);
 
 
     %   Binder
@@ -51,5 +50,12 @@ function state = State(config)
         solver.prepare(q,t,varargin{:});
     end
     
+    
+    
+    
+    %    Late updating
+    if (nargin >= 1) && not(isempty(config))
+        state.set(config);
+    end
     
 end

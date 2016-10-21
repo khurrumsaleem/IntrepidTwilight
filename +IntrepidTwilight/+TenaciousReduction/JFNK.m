@@ -59,7 +59,7 @@ function jfnk = JFNK(config)
 
     %   Extract parameters from store
     jfnk.prepare  = @(varargin) prepare(varargin{:});
-    params        = struct()                        ;
+    warehouse     = struct()                        ;
     isNotPrepared = true                            ;
     isNormNotDone = []                              ;
     isStepNotDone = []                              ;
@@ -71,18 +71,18 @@ function jfnk = JFNK(config)
             preconditioner.prepare();
             
             %   Pull parameters
-            params = jfnk.get();
+            warehouse = jfnk.get();
             
             isNotPrepared = false;
             
             %   Get convergence checker
-            isNormNotDone = params.isNormNotDone;
+            isNormNotDone = warehouse.isNormNotDone;
             if isempty(isNormNotDone)
-                isNormNotDone = @(x,r) norm(r) > params.tolerance.nonlinear;
+                isNormNotDone = @(x,r) norm(r) > warehouse.tolerance.nonlinear;
             end
             
             %   Get step-size checker
-            isStepNotDone = params.isStepNotDone;
+            isStepNotDone = warehouse.isStepNotDone;
             if isempty(isStepNotDone)
                 isStepNotDone = @(dx) true;
             end
@@ -117,11 +117,11 @@ function jfnk = JFNK(config)
         nRows = numel(x);
         
         %   Determine column count
-        if (params.gmres.iteration.maximum == -1)
+        if (warehouse.gmres.iteration.maximum == -1)
             nCols                          = nRows;
-            params.gmres.iteration.maximum = nCols;
+            warehouse.gmres.iteration.maximum = nCols;
         else
-            nCols = params.gmres.iteration.maximum;
+            nCols = warehouse.gmres.iteration.maximum;
         end
         
         %   Allocate
@@ -151,7 +151,7 @@ function jfnk = JFNK(config)
 
         %   Allocate stats struct
         stats.iterations                       = 0;
-        stats.norm(params.maximumIterations,1) = 0;
+        stats.norm(warehouse.maximumIterations,1) = 0;
 
 
         %   Initialize  residual
@@ -162,7 +162,7 @@ function jfnk = JFNK(config)
 
         
         %   Hook
-        preSolveFlag = params.hook.presolve([xNL;rNL]);
+        preSolveFlag = warehouse.hook.presolve([xNL;rNL]);
 
         %   Initialize preconditionar
         preconditioner.initialize(xNL);
@@ -173,7 +173,7 @@ function jfnk = JFNK(config)
         %       calls may occur when an 'exit' has been called for, but the
         %       likelihood of a preSolve calling for a full fallback is 
         %       considered small and not worth a refactor.
-        normNotDone  = rNLnorm > params.tolerance.residual              ;
+        normNotDone  = rNLnorm > warehouse.tolerance.residual              ;
         stepNotDone  = true()                                           ;
         notConverged = normNotDone && stepNotDone                       ;
         belowIterMax = true()                                           ;
@@ -187,7 +187,7 @@ function jfnk = JFNK(config)
         while notDone
 
             %   Hook
-            preFlag = params.hook.prestep(xNL);
+            preFlag = warehouse.hook.prestep(xNL);
             if strcmpi('exit',preFlag)
                 flaggedExit = true();
                 break;
@@ -199,7 +199,7 @@ function jfnk = JFNK(config)
 
 
             % Hook
-            postFlag = params.hook.poststep([xNL;rNL]);
+            postFlag = warehouse.hook.poststep([xNL;rNL]);
             if strcmpi('exit',postFlag)
                 flaggedExit = true();
                 break;
@@ -215,7 +215,7 @@ function jfnk = JFNK(config)
             %   Iteration convergence stuff
             normNotDone  = isNormNotDone(xNL,rNL)                       ;
             stepNotDone  = isStepNotDone(dx)                            ;
-            belowIterMax = stats.iterations <= params.maximumIterations ;
+            belowIterMax = stats.iterations <= warehouse.maximumIterations ;
             notConverged = normNotDone && stepNotDone                   ;
 
 
@@ -226,7 +226,7 @@ function jfnk = JFNK(config)
         end
         
         % Hook
-        postSolveFlag = params.hook.postsolve(xNL);
+        postSolveFlag = warehouse.hook.postsolve(xNL);
         
         
         %   Contract vector to the number of actuall iterations
@@ -324,11 +324,11 @@ function jfnk = JFNK(config)
     %   Outer "Restart" Iterations
     function dx = GMRES(xk,rk,rkNorm)
         dx = 0;
-        for k = 1:params.gmres.iteration.restarts
+        for k = 1:warehouse.gmres.iteration.restarts
             xk             = xk + dx                ;
             [dx,rk,rkNorm] = GMRESInner(xk,rk,rkNorm);
             
-            if rkNorm <= params.gmres.tolerance
+            if rkNorm <= warehouse.gmres.tolerance
                 break;
             end
         end
@@ -341,8 +341,8 @@ function jfnk = JFNK(config)
     function [dx,rk,rkNorm] = GMRESInner(xk,rk0,rk0Norm)
         
         %   Create shortcuts for closure variables
-        nu              = params.gmres.nu       ;
-        linearTolerance = params.gmres.tolerance;
+        nu              = warehouse.gmres.nu       ;
+        linearTolerance = warehouse.gmres.tolerance;
         n               = numel(xk)             ;
         
         
@@ -383,7 +383,7 @@ function jfnk = JFNK(config)
         end
         
         
-        for k = 2:params.gmres.iteration.maximum
+        for k = 2:warehouse.gmres.iteration.maximum
             
             % Choose the next basis vector
             if rkNorm <= nu*rkm1Norm
