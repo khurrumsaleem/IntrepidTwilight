@@ -65,6 +65,24 @@ function evolver = Evolver(config)
         absoluteTolerance = evolver.get('tolerance.absolute')   ;
         fallbacks         = zeros(1,25)                         ;
         dtFall            = zeros(1,8)                          ;
+        
+        
+        %   Deal with dynamic maximum time step
+        if not(any(size(stepMax) == [0,0]))
+            if isscalar(stepMax)
+                stepMaxFun = @(t) stepMax;
+            else
+                if size(stepMax,1) == 1 %   One entry table
+                    stepMaxFun = @(t) stepMax(1,2);
+                elseif size(stepMax,1) >= 2
+                    stepMaxFun = @(t) interp1(stepMax(:,1),stepMax(:,2),t,'previous',stepMax(end,2));
+                end
+            end
+        else
+            error('IntrepidTwilight:executive:Evolver:emptyTimeStepTable',...
+                'Time Step Tables must have no empty dimensions');
+        end
+        
 
 
         %   Create vector of save times
@@ -193,7 +211,7 @@ function evolver = Evolver(config)
                 dt        = min([...
                             2^(1-fallRate) * dt * (fallRate<=0.1) + ...
                             0.5 * dtFall(1)     * (fallRate> 0.1) ,...
-                            stepMax]);
+                            stepMaxFun(t)]);
                 fallbacks = [0,fallbacks(1:24)]  ;
             end
         end

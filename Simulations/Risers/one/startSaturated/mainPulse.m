@@ -1,5 +1,5 @@
 clc();
-% clear();
+clear();
 T0 = 372;
 P0 = SaturationStateGivenTemperature(T0);
 
@@ -31,15 +31,15 @@ T{m}        = []          ;
 state{m}    = []          ;
 P{m}        = []          ;
 newstate    = {mass0,energy0,volume0,momentum0};
-q0          = 1000        ;
+q0          = 16000        ;
 
 tall = tic;
-for k = 2:m
+for k = 1:m
     %
     %   Setup
     hem = testHEMPulse(P0,T0,q0,newstate{:},qPulse(k));
-    hem.set('evolver','time.span'         , [90,150] );
-    hem.set('evolver','time.step.maximum' ,    dt    );
+    hem.set('evolver','time.span'         , [0,150] );
+    hem.set('evolver','time.step.maximum' ,  [0,0.50;95,0.02;105,0.25] );
     hem.set('evolver','time.step.minimum' ,   1E-8   );
     hem.set('evolver','time.step.goal'    ,   dt     );
     hem.set('evolver','saveRate'          ,  0.01    );
