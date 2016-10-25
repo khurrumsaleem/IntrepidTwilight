@@ -709,8 +709,8 @@ function q2Dup = Quasi2DUpwind(config)
             muG  = Viscosity(rhoG,T,true,TD)            ;
             ReL  = rhov .* Lchar ./ muL                 ;
             ReG  = rhov .* Lchar ./ muG                 ;
-            fL0  = kinematicFrictionFactor(ReL,eoD)/4   ;
-            fG0  = kinematicFrictionFactor(ReG,eoD)/4   ;
+            fL0  = kinematicFrictionFactor(ReL,eoD)     ;
+            fG0  = kinematicFrictionFactor(ReG,eoD)     ;
              
             %   Correlation for two-phase friction multiplier
             A1     = (1-x).^2 + x.^2 .* ( rhoL.*fG0 ./ (rhoG.*fL0) );
